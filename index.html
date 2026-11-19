@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>de_contract</title>
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="logo">de_contract<span class="ver">v1.0</span></div>
+    <div class="status" id="status">loading...</div>
+    <button class="btn" id="refresh">refresh</button>
+  </header>
+
+  <main class="layout">
+    <section class="win" id="main">
+      <nav class="tabs" id="tabs">
+        <button data-tab="guaranteed" class="on">guaranteed</button>
+        <button data-tab="browse">browse</button>
+        <button data-tab="calc">calculator</button>
+        <button data-tab="inv">inventory</button>
+        <button data-tab="tracker">tracker</button>
+        <button data-tab="hollow" class="ghost">the hollow</button>
+        <button data-tab="settings">settings</button>
+      </nav>
+
+      <div class="pane on" id="tab-guaranteed">
+        <div class="pane-head">
+          <div>
+            <h2>sure things</h2>
+            <p class="dim">every possible outcome sells for more than the inputs cost, after fees. buy fast, these die quick.</p>
+          </div>
+          <div class="row">
+            <label class="chk"><input type="checkbox" id="g-st"> stattrak only</label>
+            <select id="g-tier" class="sel"><option value="">all tiers</option></select>
+          </div>
+        </div>
+        <div class="list" id="g-list"></div>
+      </div>
+
+      <div class="pane" id="tab-browse">
+        <div class="filters">
+          <label>tier <select id="f-tier" class="sel"><option value="">all</option></select></label>
+          <label>type <select id="f-st" class="sel"><option value="">any</option><option value="0">normal</option><option value="1">stattrak</option></select></label>
+          <label>max cost $ <input id="f-cost" class="inp" type="number" min="0" step="1" placeholder="any"></label>
+          <label>min win % <input id="f-win" class="inp" type="number" min="0" max="100" step="5" value="0"></label>
+          <label>min roi % <input id="f-roi" class="inp" type="number" step="5" placeholder="any"></label>
+          <label>sort <select id="f-sort" class="sel"><option value="roi">roi</option><option value="win">win chance</option><option value="ev">ev $</option><option value="cost">cheapest</option></select></label>
+          <label class="grow">search <input id="f-q" class="inp" placeholder="skin or collection"></label>
+          <label class="chk"><input type="checkbox" id="f-thin"> hide thin listings</label>
+        </div>
+        <div class="list" id="b-list"></div>
+      </div>
+
+      <div class="pane" id="tab-calc">
+        <div class="pane-head">
+          <div>
+            <h2>calculator</h2>
+            <p class="dim">10 skins same rarity, or 5 coverts for a knife/gloves. floats matter.</p>
+          </div>
+          <div class="row">
+            <label class="chk"><input type="checkbox" id="c-st"> stattrak</label>
+            <button class="btn" id="c-clear">clear</button>
+          </div>
+        </div>
+        <div class="calc">
+          <div class="box">
+            <div class="box-t">inputs <span id="c-count">0/10</span></div>
+            <div class="picker">
+              <input class="inp" id="c-search" placeholder="search a skin...">
+              <div class="drop" id="c-drop"></div>
+            </div>
+            <div id="c-inputs"></div>
+          </div>
+          <div class="box">
+            <div class="box-t">outcomes</div>
+            <div id="c-out" class="dim">add some skins</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pane" id="tab-inv">
+        <div class="pane-head">
+          <div>
+            <h2>inventory</h2>
+            <p class="dim">needs a public inventory + the worker url in settings. steam doesnt give floats here so it assumes the middle of each wear.</p>
+          </div>
+          <div class="row">
+            <input class="inp" id="inv-id" placeholder="steamid64 or profile link">
+            <button class="btn" id="inv-go">load</button>
+          </div>
+        </div>
+        <div id="inv-out" class="dim"></div>
+      </div>
+
+      <div class="pane" id="tab-tracker">
+        <div class="pane-head">
+          <div>
+            <h2>tracker</h2>
+            <p class="dim">log what you actually did. losses get buried in the hollow.</p>
+          </div>
+          <div class="row"><button class="btn" id="t-export">export</button></div>
+        </div>
+        <div class="totals" id="t-totals"></div>
+        <div class="list" id="t-list"></div>
+      </div>
+
+      <div class="pane hollow" id="tab-hollow">
+        <div class="pane-head">
+          <div>
+            <h2>the hollow</h2>
+            <p class="dim">where guaranteed trade ups go when they die. and your L's.</p>
+          </div>
+        </div>
+        <div class="yard" id="h-yard"></div>
+      </div>
+
+      <div class="pane" id="tab-settings">
+        <div class="pane-head"><div><h2>settings</h2></div></div>
+        <div class="form">
+          <label>worker url <input class="inp wide" id="s-worker" placeholder="https://de-contract.yourname.workers.dev"></label>
+          <p class="dim">needed for live recheck + inventory. setup is in the readme.</p>
+          <label class="chk"><input type="checkbox" id="s-guy" checked> show the guy</label>
+          <label class="chk"><input type="checkbox" id="s-music" checked> music on the rate limit scene</label>
+          <button class="btn" id="s-scene">play the rate limit scene</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="stage" id="stage">
+      <div class="stage-floor"></div>
+      <div class="guy" id="guy"></div>
+    </aside>
+  </main>
+
+  <div class="modal" id="modal" hidden>
+    <div class="win dlg">
+      <div class="dlg-t"><span id="m-title">trade up</span><button class="x" id="m-close">x</button></div>
+      <div class="dlg-b" id="m-body"></div>
+    </div>
+  </div>
+
+  <footer class="foot">made by mason arcieri · prices from steam + skinport · not financial advice lol</footer>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
