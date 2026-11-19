@@ -138,7 +138,7 @@ const lucky = results.filter(r => !r.guaranteed && r.win >= 0.5).sort((a, b) => 
 for (const r of lucky) { const k = pairKey(r); if (used.has(k)) continue; used.add(k); top.push(r); }
 
 const firstSeen = {};
-for (const g of guaranteed) firstSeen[g.id] = prevState?.firstSeen?.[g.id] || now;
+for (const g of guaranteed) g.born = firstSeen[g.id] = prevState?.firstSeen?.[g.id] || now;
 const hollow = prevState?.hollow || [];
 for (const old of prevTrades?.guaranteed || []) {
   if (seen.has(old.id) || !prevState?.firstSeen?.[old.id]) continue;

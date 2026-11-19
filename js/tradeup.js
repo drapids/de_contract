@@ -130,3 +130,14 @@ export function evaluate(db, inputs, st, price) {
   const guaranteed = unknown === 0 && worst > cost;
   return { inputs, outs, st, cost, ev, roi: cost ? (ev - cost) / cost : 0, win, worst, best, unknown, guaranteed };
 }
+
+export function parseHash(h) {
+  const st = h.includes('StatTrak™');
+  let n = h.replace('StatTrak™ ', '');
+  const m = n.match(/^(.*) \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/);
+  const wi = m ? WEARS.findIndex(w => w[0] === m[2]) : -1;
+  if (m) n = m[1];
+  return { name: n, st, wi };
+}
+
+export function usd(c) { return (c < 0 ? '-$' : '$') + (Math.abs(c) / 100).toFixed(2); }
