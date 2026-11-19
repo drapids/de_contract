@@ -25,7 +25,6 @@ const S = {
 let guy = null;
 
 function marketUrl(h, m) {
-  if (m === 'skinport') return `https://skinport.com/market?search=${encodeURIComponent(parseHash(h).name)}&cat=&sort=price&order=asc`;
   return `https://steamcommunity.com/market/listings/730/${encodeURIComponent(h)}`;
 }
 
@@ -57,15 +56,19 @@ function tierOptions(sel) {
 function renderGuaranteed() {
   const st = $('#g-st').checked, tier = $('#g-tier').value, num = id => parseFloat($(id).value);
   const cost = num('#g-cost'), pmin = num('#g-pmin'), pmax = num('#g-pmax'), pct = num('#g-pct'), thin = $('#g-thin').checked;
-  const list = (S.data?.guaranteed || []).filter(t => {
+  const ok = t => {
     const p = t.worst - t.cost;
     return (!st || t.st) && (!tier || t.tier == tier) && (isNaN(cost) || t.cost <= cost * 100) && (isNaN(pmin) || p >= pmin * 100) &&
       (isNaN(pmax) || p <= pmax * 100) && (isNaN(pct) || p / t.cost * 100 >= pct) && (!thin || !t.thin);
-  });
+  };
+  const list = (S.data?.guaranteed || []).filter(ok);
+  const pend = (S.data?.pending || []).filter(ok);
   const key = { pct: t => -(t.worst - t.cost) / t.cost, usd: t => -(t.worst - t.cost), ev: t => -(t.ev - t.cost), cost: t => t.cost, new: t => -(t.born || 0) }[$('#g-sort').value];
   list.sort((a, b) => key(a) - key(b));
-  $('#g-list').innerHTML = list.length ? head + list.map(row).join('') :
-    `<div class="empty">nothing guaranteed right now.<br>check browse for the high win chance ones, or wait for the next scan.</div>`;
+  pend.sort((a, b) => key(a) - key(b));
+  $('#g-list').innerHTML = (list.length ? head + list.map(row).join('') :
+    `<div class="empty">nothing confirmed right now.<br>every one here gets double checked on steam first, so this is usually short.</div>`) +
+    (pend.length ? `<div class="pend-h">still checking on steam (${pend.length}) <span class="dim">· prices look good but not confirmed yet, dont buy off these</span></div>` + pend.map(row).join('').replaceAll('class="tu sure', 'class="tu pend') : '');
 }
 
 function renderBrowse() {
@@ -83,7 +86,7 @@ function renderBrowse() {
   $('#b-list').innerHTML = list.length ? head + list.slice(0, 200).map(row).join('') + (list.length > 200 ? `<div class="dim">${list.length - 200} more, filter it down</div>` : '') : '<div class="empty">no trade ups match that</div>';
 }
 
-function find(id) { return [...(S.data?.guaranteed || []), ...(S.data?.top || [])].find(t => t.id === id); }
+function find(id) { return [...(S.data?.guaranteed || []), ...(S.data?.pending || []), ...(S.data?.top || [])].find(t => t.id === id); }
 
 function outTable(t, live) {
   const rows = t.outs.map(o => {
@@ -169,7 +172,7 @@ async function recheck(t, cine) {
   try {
     log('pulling ' + names.length + ' prices...');
     if (cine) await sleep(900);
-    log('steam + skinport...');
+    log('asking steam...');
     const live = await worker('/prices?names=' + encodeURIComponent(JSON.stringify(names)));
     log('got em. crunching');
     if (cine) await sleep(800);
@@ -177,12 +180,13 @@ async function recheck(t, cine) {
     const outs = {};
     for (const i of t.in) {
       const m = live[i[0]] || {};
-      const c = Math.min(...['steam', 'skinport'].map(k => m[k]?.[0] || Infinity));
+      const c = m.steam?.[0] || Infinity;
       if (!isFinite(c)) { missing.push(i[0]); cost += i[2] * i[1]; } else cost += c * i[1];
     }
     for (const o of t.outs) {
       const m = live[o[0]] || {};
-      const net = Math.max(...['steam', 'skinport'].map(k => m[k]?.[0] ? netAfterFee(k, m[k][0] - 1) : 0));
+      const st = m.steam, base = st ? Math.min(st[0], st[2] || st[0]) : 0;
+      const net = base && (st[1] >= 1 || !st[2]) ? netAfterFee('steam', base - 1) : 0;
       outs[o[0]] = net || o[3];
       worst = Math.min(worst, outs[o[0]]); ev += o[1] * outs[o[0]];
     }
@@ -262,7 +266,7 @@ function renderStatus() {
   if (!d) return;
   const n = d.guaranteed.length;
   const stale = Date.now() - d.at > 15 * 60000;
-  $('#status').innerHTML = `scanned <b>${ago(d.at)}</b>${stale ? ' <span class="rl">(stale)</span>' : ''} · <b>${n}</b> guaranteed · <b>${d.top.length}</b> others · steam ${d.sources.steam ?? 0} · skinport ${typeof d.sources.skinport === 'number' ? d.sources.skinport : 'down'}${d.rateLimited ? ' · <span class="rl">steam rate limited us</span>' : ''}`;
+  $('#status').innerHTML = `scanned <b>${ago(d.at)}</b>${stale ? ' <span class="rl">(stale)</span>' : ''} · <b>${n}</b> guaranteed · <b>${d.top.length}</b> others · <b>${(d.pending || []).length}</b> checking · steam prices ${d.sources.steam ?? 0}${d.rateLimited ? ' · <span class="rl">steam rate limited us</span>' : ''}`;
   $('#tabs [data-tab=guaranteed]').textContent = `guaranteed (${n})`;
   if (stale) window.dispatchEvent(new CustomEvent('dc:stale'));
 }

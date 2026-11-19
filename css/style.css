@@ -255,3 +255,6 @@ body.defusing .bar, body.defusing .layout, body.defusing .foot { filter: blur(3p
 .defuse.boom .key-big { color: #d9694f; }
 @keyframes boom { 0% { background: #fff; } 15% { background: #f7c46b; } 100% { background: rgba(0,0,0,.85); } }
 .defuse.gone { opacity: 0; transition: opacity .5s; }
+
+.pend-h { margin: 14px 0 4px; color: var(--gold); }
+.tu.pend { opacity: .6; box-shadow: inset 3px 0 0 var(--gold); }

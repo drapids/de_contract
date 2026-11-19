@@ -4,40 +4,27 @@ const UA = { 'User-Agent': 'Mozilla/5.0 de_contract' };
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const cents = s => s ? Math.round(parseFloat(String(s).replace(/[^0-9.]/g, '')) * 100) : 0;
 
-async function skinport(ctx) {
-  const key = new Request('https://cache.local/skinport');
-  const hit = await caches.default.match(key);
-  if (hit) return hit.json();
-  const r = await fetch('https://api.skinport.com/v1/items?app_id=730&currency=USD&tradable=0', { headers: { ...UA, 'Accept-Encoding': 'br' } });
-  if (!r.ok) return {};
-  const map = {};
-  for (const i of await r.json()) if (i.min_price) map[i.market_hash_name] = [Math.round(i.min_price * 100), i.quantity || 0];
-  ctx.waitUntil(caches.default.put(key, new Response(JSON.stringify(map), { headers: { 'Cache-Control': 'max-age=300' } })));
-  return map;
-}
-
 async function steam(name) {
   const r = await fetch(`https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(name)}`, { headers: UA });
   if (r.status === 429) return { rate: true };
   if (!r.ok) return null;
   const j = await r.json();
-  return j.success && j.lowest_price ? [cents(j.lowest_price), parseInt(String(j.volume || '0').replace(/,/g, '')) || 0] : null;
+  return j.success && j.lowest_price ? [cents(j.lowest_price), parseInt(String(j.volume || '0').replace(/,/g, '')) || 0, cents(j.median_price)] : null;
 }
 
-async function prices(url, ctx) {
+async function prices(url) {
   let names;
   try { names = JSON.parse(url.searchParams.get('names') || '[]'); } catch { return json({ error: 'bad names' }, 400); }
   names = names.slice(0, 30);
-  const sp = await skinport(ctx);
   const out = {};
   let rate = 0;
   for (const n of names) {
     const s = await steam(n);
     if (s?.rate) rate++;
-    out[n] = { steam: s && !s.rate ? s : null, skinport: sp[n] || null };
+    out[n] = { steam: s && !s.rate ? s : null };
     await new Promise(r => setTimeout(r, 250));
   }
-  if (rate && rate === names.length && !Object.values(out).some(v => v.skinport)) return json({ error: 'steam rate limited' }, 429);
+  if (rate && rate === names.length) return json({ error: 'steam rate limited' }, 429);
   return json(out);
 }
 
@@ -75,7 +62,7 @@ export default {
     if (env.SITE_KEY && req.headers.get('x-key') !== env.SITE_KEY) return json({ error: 'wrong key' }, 401);
     try {
       if (url.pathname === '/scan' && req.method === 'POST') return await scan(env);
-      if (url.pathname === '/prices') return await prices(url, ctx);
+      if (url.pathname === '/prices') return await prices(url);
       if (url.pathname === '/inv') return await inventory(url);
       return json({ ok: true, routes: ['/prices?names=[...]', '/inv?id=steamid', 'POST /scan'] });
     } catch (e) {
