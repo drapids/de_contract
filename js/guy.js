@@ -143,6 +143,7 @@ void main() {
 }`;
 
 const pick = a => a[Math.random() * a.length | 0];
+const GUN_OFF = new Float32Array([0, 0.115, 0, 0, 0, 0, 0.115, 0, 0.115, 0, 0, 0, 0, 0.156, -0.086, 1]);
 const LINES = {
   poke: ['bro stop clicking me', 'i\'m working here', 'you got money for this?', 'ow', 'one more and i\'m sending it all to cases'],
   fail: ['bruh', 'thats not it chief', 'nah that one\'s cooked', 'steam tax got us'],
@@ -164,7 +165,16 @@ const CFG = {
   pickup: { clip: 'PickUp_Table', once: true, next: 'hold' },
   dance: { clip: 'Dance_Loop', look: 0.2 },
   bounce: { clip: 'Billy_Bounce', look: 0, plant: true },
-  yes: { clip: 'Yes', once: true, next: 'idle' }
+  yes: { clip: 'Yes', once: true, next: 'idle' },
+  sprint: { clip: 'Sprint_Loop', look: 0 },
+  walkhome: { clip: 'Walk_Loop', look: 0 },
+  aim: { clip: 'Pistol_Aim_Neutral', look: 0 },
+  shoot: { clip: 'Pistol_Shoot', once: true, next: 'aim', again: true },
+  knock: { clip: 'Hit_Knockback', once: true, next: 'down' },
+  down: { clip: 'Hit_Knockback', look: 0, freeze: true },
+  getup: { clip: 'LayToIdle', once: true, next: 'idle' },
+  shock: { clip: 'Idle_No_Loop', look: 0.2 },
+  scared: { clip: 'Hit_Head', once: true, next: 'shock' }
 };
 
 export class Guy {
@@ -279,6 +289,20 @@ export class Guy {
     this.machineFace = this.rigid(quad(0.26, 0.15, 0.136));
     this.machineCanvas = this.paint(96, 64, () => {});
     this.machineTex = this.texFromCanvas(this.machineCanvas);
+    try {
+      const g = await fetch(this.base + 'revolver.json').then(r => r.json());
+      this.gun = this.mesh(g.pos, g.nor, g.uv, g.idx);
+      this.gunTex = await this.texFromUrl(this.base + 'revolver.png', false);
+    } catch (e) { this.gun = null; }
+    this.spookRig = { bones: this.bones, rest: this.rest, restQ: this.restQ, byName: this.byName, body: this.body, tex: this.skinTex, tint: [0.75, 0.9, 1.0, 0.5], ghost: true };
+    try {
+      const sp = await fetch(this.base + 'specter.json').then(r => { if (!r.ok) throw 0; return r.json(); });
+      const bones = sp.bones.map(b => ({ name: b.name, parent: b.parent, local: new Float32Array(b.local), inv: new Float32Array(b.invBind) }));
+      const byName = {}; bones.forEach((b, i) => byName[b.name] = i);
+      const rest = []; bones.forEach((b, i) => { rest[i] = b.parent >= 0 ? M4.mul(rest[b.parent], b.local) : b.local; });
+      this.spookRig = { bones, rest, restQ: rest.map(m => Q.fromMat(m)), byName, body: this.mesh(sp.pos, sp.nor, sp.uv, sp.idx, sp.bi, sp.bw), tex: await this.texFromUrl(this.base + 'specter.png', false), tint: [1, 1, 1, sp.alpha ?? 0.92], ghost: false };
+    } catch (e) {}
+    this.spook = { on: false, x: 1.6, z: -0.2, turn: -90, clip: 'Zombie_Idle_Loop', t0: 0, alpha: 1, flick: 0 };
     this.resize();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
@@ -390,7 +414,7 @@ export class Guy {
     if (hold) this.holdTimer = setTimeout(() => this.set('idle'), hold);
   }
 
-  busy() { return ['push', 'walkin', 'sitdown', 'standup', 'roll', 'pickup'].includes(this.state); }
+  busy() { return this.locked || ['push', 'walkin', 'sitdown', 'standup', 'roll', 'pickup'].includes(this.state); }
 
   poke() {
     if (this.busy()) return;
@@ -414,6 +438,8 @@ export class Guy {
     if (this.state === 'push' && st > 5.5) this.set('walkin');
     if (this.state === 'walkin' && st > 2.8) this.set('idle');
     const quiet = performance.now() - (this.active || 0);
+    if (this.state === 'hold' && st > 9 && !this.snatched) { this.snatched = true; if (Math.random() < 0.35) this.snatch(); }
+    if (this.state !== 'hold') this.snatched = false;
     if (this.state === 'idle' && !this.locked) {
       if (quiet > 120000) this.set('sitdown');
       else if (st > (this.nextFidget ??= 14 + Math.random() * 14)) {
@@ -422,6 +448,141 @@ export class Guy {
       }
     }
     if (['fold', 'phone', 'watch', 'no'].includes(this.state) && st > (this.state === 'phone' ? 11 : 6)) this.set('idle');
+  }
+
+  spookDo(clip, opts = {}) {
+    Object.assign(this.spook, { clip, t0: this.now || 0, once: false, ...opts });
+  }
+
+  scene(variant, onDone) {
+    const S = this.spook;
+    this.locked = true;
+    this.sceneT0 = this.now;
+    this.sceneVariant = variant;
+    this.sceneDone = onDone;
+    Object.assign(S, { on: true, x: 1.75, z: -0.15, turn: -90, alpha: 1, vx: 0, gun: false, fade: 0, plant: false, stopAt: null });
+    this.haunting = false; this.homeX = 0; this.homing = false;
+    clearTimeout(this.peekTimer);
+    this.spookDo('Zombie_Idle_Loop');
+    this.pos = [0, 0, 0];
+    this.vx = 0;
+    this.set('idle');
+    const T = [];
+    const at = (t, f) => T.push({ t, f });
+    at(0.1, () => { S.vx = -0.55; });
+    at(0.9, () => { S.vx = 0; this.lookT = [1, -0.1]; this.lookLock = true; });
+    at(1.7, () => { this.sceneTurn = 60; this.set('scared'); this.say('uh. hello?', 1500); });
+    at(2.5, () => { this.spookDo('Zombie_Walk_Fwd_Loop'); S.vx = -0.32; });
+    at(3.0, () => { this.sceneTurn = -90; this.set('sprint'); this.vx = -0.55; this.say('NOPE', 1200); });
+    at(4.3, () => { this.vx = 0; this.sceneTurn = 90; this.set('aim'); this.armed = true; this.say('stay back im warning you', 1600); });
+    if (variant === 'flip') {
+      at(5.1, () => { S.vx = 0; this.spookDo('Zombie_Scratch', { once: true }); });
+      at(5.6, () => { this.armed = false; S.gun = true; this.set('shock'); this.say('hey thats mine', 1400); });
+      at(6.3, () => { this.spookDo('Pistol_Aim_Neutral'); });
+      at(6.9, () => { this.spookDo('Pistol_Shoot', { once: true }); this.shot('spook'); this.set('knock'); });
+      at(8.0, () => { S.gun = false; this.spookDo('Billy_Bounce', { plant: true }); });
+    } else {
+      for (const t of [5.0, 5.6, 6.2]) at(t, () => { this.set('shoot'); this.shot('guy'); });
+      at(6.9, () => { S.vx = 0; this.spookDo('Billy_Bounce', { plant: true }); });
+      at(7.4, () => { this.armed = false; this.set('shock'); this.say('bro its a ghost', 2200); });
+      at(10.5, () => this.say('...is that billy bounce', 2200));
+    }
+    this.timeline = T.sort((a, b) => a.t - b.t);
+  }
+
+  endScene() {
+    if (!this.spook.on) return;
+    const S = this.spook;
+    this.timeline = [];
+    this.spookDo('Spell_Simple_Shoot', { once: true });
+    S.vx = 0; S.fade = this.now;
+    const down = this.state === 'down';
+    this.set(down ? 'getup' : 'idle');
+    this.armed = false;
+    setTimeout(() => {
+      S.on = false; this.locked = false; this.lookLock = false; this.sceneTurn = null;
+      this.homing = true;
+      this.sceneDone?.();
+    }, down ? 2600 : 900);
+  }
+
+  shot(who) {
+    this.shots = (this.shots || []).concat({ who, t: this.now });
+    if (who === 'guy') this.spook.flick = this.now;
+  }
+
+  runScene(dt) {
+    if (!this.spook.on && !this.homing) return;
+    const S = this.spook;
+    if (S.on && !this.locked) {
+      S.x += (S.vx || 0) * dt;
+      if (S.stopAt != null && S.vx < 0 && S.x < S.stopAt) { S.x = S.stopAt; S.vx = 0; }
+    }
+    if (S.on && this.locked) {
+      const st = this.now - this.sceneT0;
+      while (this.timeline?.length && this.timeline[0].t <= st) this.timeline.shift().f();
+      S.x += (S.vx || 0) * dt;
+      if (S.x < this.pos[0] + 0.55 && S.vx < 0 && this.sceneVariant !== 'flip') S.vx = 0;
+      if (S.x < this.pos[0] + 0.85 && S.vx < 0 && this.sceneVariant === 'flip') S.vx = 0;
+      this.pos[0] += (this.vx || 0) * dt;
+    }
+    if (this.homing) {
+      const d = (this.homeX || 0) - this.pos[0];
+      if (Math.abs(d) < 0.02) { this.pos[0] = this.homeX || 0; this.homing = false; if (this.state === 'walkhome') this.set('idle'); this.sceneTurn = null; }
+      else {
+        if (this.state !== 'walkhome' && this.state !== 'getup') { this.set('walkhome'); }
+        if (this.state === 'walkhome') { this.sceneTurn = d > 0 ? 90 : -90; this.pos[0] += Math.sign(d) * Math.min(Math.abs(d), 0.9 * dt); }
+      }
+    }
+  }
+
+  peek() {
+    const S = this.spook;
+    if (S.on || this.locked) return;
+    Object.assign(S, { on: true, x: 1.7, z: -0.3, turn: -90, vx: -0.4, fade: 0, gun: false, plant: false });
+    this.spookDo('Zombie_Idle_Loop');
+    this.peekT = this.now;
+    clearTimeout(this.peekTimer);
+    this.peekTimer = setTimeout(() => { S.vx = 0.5; setTimeout(() => { if (!this.locked) S.on = false; }, 1600); }, 3200);
+  }
+
+  haunt(on) {
+    const S = this.spook;
+    if (this.locked) return;
+    if (on) {
+      clearTimeout(this.peekTimer);
+      Object.assign(S, { on: true, x: 1.6, z: -0.4, turn: -70, vx: -0.6, fade: 0, gun: false, plant: false, stopAt: 0.55 });
+      this.spookDo('Spell_Simple_Idle_Loop');
+      this.haunting = true;
+      this.homeX = -0.3;
+      this.homing = true;
+      setTimeout(() => { if (this.haunting) this.say(pick(['oh its HIS house', 'i dont like it here', 'why is it cold']), 2000); }, 1500);
+    } else if (this.haunting) {
+      this.haunting = false;
+      S.fade = this.now;
+      setTimeout(() => { if (!this.haunting && !this.locked) S.on = false; }, 800);
+      this.homeX = 0;
+      this.homing = true;
+    }
+  }
+
+  cast(text) {
+    if (!this.haunting) return;
+    this.spookDo('Spell_Simple_Shoot', { once: true });
+    clearTimeout(this.castTimer);
+    this.castTimer = setTimeout(() => { if (this.haunting) this.spookDo('Spell_Simple_Idle_Loop'); }, 1100);
+    if (text) this.say(text, 3200);
+  }
+
+  snatch() {
+    const S = this.spook;
+    if (S.on || this.locked || this.state !== 'hold') return;
+    Object.assign(S, { on: true, x: 1.5, z: 0.05, turn: -90, vx: -0.9, fade: 0, gun: false, plant: false, stopAt: 0.75 });
+    this.spookDo('Zombie_Walk_Fwd_Loop');
+    setTimeout(() => { if (!S.on) return; S.vx = 0; this.spookDo('Zombie_Scratch', { once: true }); }, 850);
+    setTimeout(() => { if (this.state === 'hold') this.say(pick(['HANDS OFF', 'get your own', 'nah this ones mine']), 1600); }, 1500);
+    setTimeout(() => { S.turn = 90; S.vx = 1.2; this.spookDo('Zombie_Walk_Fwd_Loop'); }, 2400);
+    setTimeout(() => { if (!this.locked && !this.haunting) S.on = false; }, 3800);
   }
 
   wake() {
@@ -481,7 +642,7 @@ export class Guy {
     }
     const cf = CFG[state];
     if (cf && this.clips[cf.clip]) {
-      const c = this.clip(cf.clip, t, !cf.once);
+      const c = this.clip(cf.clip, cf.freeze ? 99 : t, !cf.once && !cf.freeze);
       const root = c.root.slice();
       if (cf.move) root[2] += cf.move[0] + cf.move[1] * t;
       return { p: this.look2(c.p, cf.look ?? 0), root, turn: cf.turn ?? -18, plant: cf.plant };
@@ -585,6 +746,7 @@ export class Guy {
     const dt = Math.min(0.05, now - (this.last || now));
     this.last = now;
     if (this.fps) now = Math.floor(now * this.fps) / this.fps;
+    if (this.lookLock) this.lookT = [1, -0.1];
     this.look[0] += (this.lookT[0] - this.look[0]) * Math.min(1, dt * 6);
     this.look[1] += (this.lookT[1] - this.look[1]) * Math.min(1, dt * 6);
     this.blend = Math.min(1, this.blend + dt / 0.3);
@@ -605,19 +767,21 @@ export class Guy {
     else if (this.glasses > 0) this.glasses = Math.max(0, this.glasses - dt * 2.5);
     this.zoom = Math.max(0, Math.min(1, (this.zoom || 0) + (this.state === 'hold' ? dt : -dt) * 2.2));
     this.wide = Math.max(0, Math.min(1, (this.wide || 0) + (this.state === 'dubs' ? dt : -dt) * 2.5));
+    this.now = now;
+    this.runScene(dt);
     this.tick(now, st);
     this.draw(cur, now, st);
     this.drawFx(dt);
   }
 
-  skeleton(cur) {
+  skeleton(cur, rig = this) {
     const W = [];
-    this.bones.forEach((b, i) => {
+    rig.bones.forEach((b, i) => {
       let L = b.local;
       const e = cur.p[b.name];
       if (e) {
         const q = e.length === 4 ? e : Q.euler(e);
-        const rq = this.restQ[i];
+        const rq = rig.restQ[i];
         const lq = Q.mul(Q.conj(rq), Q.mul(q, rq));
         L = M4.mul(L, M4.fromQT(lq, [0, 0, 0]));
       }
@@ -625,8 +789,8 @@ export class Guy {
       W[i] = b.parent >= 0 ? M4.mul(W[b.parent], L) : L;
     });
     if (cur.plant) {
-      const fy = Math.min(W[this.byName['foot.l']][13], W[this.byName['foot.r']][13]);
-      const dy = this.rest[this.byName['foot.l']][13] - fy;
+      const fy = Math.min(W[rig.byName['foot.l']][13], W[rig.byName['foot.r']][13]);
+      const dy = rig.rest[rig.byName['foot.l']][13] - fy;
       for (const w of W) w[13] += dy;
     }
     return W;
@@ -664,7 +828,9 @@ export class Guy {
     const z = ease(this.zoom);
     const w = ease(this.wide);
     const VP = M4.mul(M4.persp(fov, asp, 0.1, 20), M4.look([lerp(0, 0.1, z), lerp(1.12, 1.38, z) + w * 0.3, lerp(5.2, 2.8, z) + w * 1.3], [lerp(0, 0.08, z), lerp(1.0, 1.2, z) + w * 0.3, 0], [0, 1, 0]));
-    const model = M4.rotY(cur.turn * Math.PI / 180);
+    if (this.sceneTurn != null) cur.turn = this.sceneTurn;
+    const pos = this.pos || [0, 0, 0];
+    const model = M4.mul(M4.fromQT([0, 0, 0, 1], pos), M4.rotY(cur.turn * Math.PI / 180));
     gl.uniformMatrix4fv(L.uVP, false, VP);
     gl.uniform1f(L.uSnap, Math.min(c.width, c.height) * 0.35);
     gl.uniform1i(L.uTex, 0);
@@ -673,8 +839,9 @@ export class Guy {
     const W = this.skeleton(cur);
     const skin = new Float32Array(16 * 24);
     W.forEach((w, i) => skin.set(M4.mul(w, this.bones[i].inv), i * 16));
+    this.lastModel = model;
     gl.uniformMatrix4fv(L.uModel, false, model);
-    this.drawShadow(VP, cur);
+    this.drawShadow(VP, cur, pos);
     gl.uniformMatrix4fv(L.uModel, false, model);
     this.bind(this.body);
     gl.uniformMatrix4fv(L.uBones, false, skin);
@@ -760,8 +927,63 @@ export class Guy {
       this.drawRigid(this.machineFace, M4.mul(m, M4.fromQT([0, 0, 0, 1], [0, 0.13, 0])), this.machineTex, [1, 1, 1, 1], 0.8);
       if (Math.random() < 0.04) this.spark(VP, model, [0.05, 0.3, 0.6]);
     }
+    if (this.gun && this.armed) {
+      if (!this.gunOff) this.gunOff = GUN_OFF;
+      const gm = M4.mul(bw('hand.r'), this.gunOff);
+      this.drawRigid(this.gun, gm, this.gunTex, [1, 1, 1, 1], 0.15, 0.8);
+      this.muzzle = M4.mul(model, M4.mul(gm, M4.fromQT([0, 0, 0, 1], [2.05, 1.38, 0])));
+    }
+    if (this.spook.on) this.drawSpook(VP, now);
+    this.drawShots(VP, now);
     const loadK = this.state === 'watch' ? 1 : this.prev === 'watch' ? 1 - this.blend : 0;
     if (loadK > 0.01) this.drawRigid(this.watch, M4.mul(bw('lowerArm.l'), this.watchOff), this.white, [0.75, 0.68, 0.3, 1], 0, 1);
+  }
+
+  drawSpook(VP, now) {
+    const gl = this.gl, L = this.loc, S = this.spook, rig = this.spookRig;
+    const c = this.clips[S.clip];
+    const t = now - S.t0;
+    let pc = this.clip(S.clip, S.once ? Math.min(t, c ? c.d : 0) : t, !S.once);
+    const cur = { p: pc.p, root: pc.root, plant: S.plant };
+    const W = this.skeleton(cur, rig);
+    const skin = new Float32Array(16 * 24);
+    W.forEach((w, i) => skin.set(M4.mul(w, rig.bones[i].inv), i * 16));
+    const bob = rig.ghost ? 0.06 + wave(now, 0.6) * 0.03 : 0.03 + wave(now, 0.6) * 0.02;
+    const fade = S.fade ? Math.max(0, 1 - (now - S.fade) / 0.8) : 1;
+    const flick = S.flick && now - S.flick < 0.35 ? (Math.floor(now * 20) % 2 ? 0.15 : 0.8) : 1;
+    const m = M4.mul(M4.fromQT([0, 0, 0, 1], [S.x, bob, S.z]), M4.rotY(S.turn * Math.PI / 180));
+    gl.uniformMatrix4fv(L.uModel, false, m);
+    this.bind(rig.body);
+    gl.uniformMatrix4fv(L.uBones, false, skin);
+    gl.bindTexture(gl.TEXTURE_2D, rig.tex);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform4fv(L.uTint, [rig.tint[0], rig.tint[1], rig.tint[2], rig.tint[3] * fade * flick]);
+    gl.uniform1f(L.uUnlit, rig.ghost ? 0.35 : 0);
+    gl.uniform1f(L.uShine, 0);
+    gl.drawElements(gl.TRIANGLES, rig.body.count, gl.UNSIGNED_SHORT, 0);
+    gl.disable(gl.BLEND);
+    if (S.gun && this.gun) {
+      const off = GUN_OFF;
+      const gm = M4.mul(W[rig.byName['hand.r']], off);
+      this.drawRigid(this.gun, gm, this.gunTex, [1, 1, 1, 1], 0.15, 0.8);
+      this.spookMuzzle = M4.mul(m, M4.mul(gm, M4.fromQT([0, 0, 0, 1], [2.05, 1.38, 0])));
+    }
+    gl.uniformMatrix4fv(L.uModel, false, this.lastModel || M4.id());
+  }
+
+  drawShots(VP, now) {
+    if (!this.shots?.length) return;
+    this.shots = this.shots.filter(s => now - s.t < 0.25);
+    const x = this.fx.getContext('2d');
+    for (const s of this.shots) {
+      const mz = s.who === 'guy' ? this.muzzle : this.spookMuzzle;
+      if (!mz) continue;
+      const a = this.project(VP, M4.id(), M4.pos(mz));
+      const tgt = s.who === 'guy' ? [this.spook.x - 0.4, 1.3, this.spook.z] : [this.pos[0], 1.25, 0];
+      const b = this.project(VP, M4.id(), tgt);
+      this.flashes = (this.flashes || []).concat({ a, b, life: 0.12 });
+      s.t = -99;
+    }
   }
 
   paintMachine(now) {
@@ -788,7 +1010,7 @@ export class Guy {
     for (let i = 0; i < 8; i++) this.confetti.push({ x, y, vx: (Math.random() - 0.5) * 160, vy: -Math.random() * 160, r: 0, c: i % 2 ? '#ffd35a' : '#fff4c0', life: 0.35 + Math.random() * 0.3 });
   }
 
-  drawShadow(VP, cur) {
+  drawShadow(VP, cur, pos = [0, 0, 0]) {
     if (!this.shadow) this.shadow = this.rigid({ P: [-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1], N: [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], U: [0, 0, 1, 0, 1, 1, 0, 1], I: [0, 2, 1, 0, 3, 2] });
     if (!this.shadowTex) {
       const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -803,7 +1025,7 @@ export class Guy {
     this.gl.uniformMatrix4fv(this.loc.uModel, false, M4.id());
     const prog = this.gl.getUniformLocation(this.prog, 'uTint');
     this.bind(this.shadow);
-    gl.uniformMatrix4fv(this.loc.uBones, false, M4.fromQT([0, 0, 0, 1], [0, 0.002, 0], 0.42 * k));
+    gl.uniformMatrix4fv(this.loc.uBones, false, M4.fromQT([0, 0, 0, 1], [pos[0], 0.002, pos[2]], 0.42 * k));
     gl.bindTexture(gl.TEXTURE_2D, this.shadowTex);
     gl.uniform4fv(prog, [1, 1, 1, 1]); gl.uniform1f(this.loc.uUnlit, 1); gl.uniform1f(this.loc.uShine, 0);
     this.fs || (this.fs = true);
@@ -814,6 +1036,14 @@ export class Guy {
   drawFx(dt) {
     const x = this.fx.getContext('2d'), w = this.fx.width, h = this.fx.height;
     x.clearRect(0, 0, w, h);
+    if (this.flashes?.length) {
+      this.flashes = this.flashes.filter(f => (f.life -= dt) > 0);
+      for (const f of this.flashes) {
+        x.strokeStyle = '#fff3b0'; x.lineWidth = 2; x.beginPath(); x.moveTo(f.a[0], f.a[1]); x.lineTo(f.b[0], f.b[1]); x.stroke();
+        x.fillStyle = '#ffd35a'; x.beginPath(); x.arc(f.a[0], f.a[1], 7, 0, 7); x.fill();
+        x.fillStyle = '#fff'; x.beginPath(); x.arc(f.a[0], f.a[1], 3, 0, 7); x.fill();
+      }
+    }
     if (!this.confetti.length) return;
     this.confetti = this.confetti.filter(p => (p.life -= dt) > 0);
     for (const p of this.confetti) {
