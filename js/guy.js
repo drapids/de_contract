@@ -105,14 +105,15 @@ function quad(w, h, cz = 0) {
 }
 
 const VS = `
-attribute vec3 aP; attribute vec3 aN; attribute vec2 aU; attribute vec4 aB; attribute vec4 aW;
+attribute vec3 aP; attribute vec3 aN; attribute vec2 aU; attribute vec4 aB; attribute vec4 aW; attribute float aH;
 uniform mat4 uBones[24]; uniform mat4 uVP; uniform mat4 uModel; uniform float uSnap;
-varying vec3 vN; varying vec2 vU; varying vec3 vW;
+varying vec3 vN; varying vec2 vU; varying vec3 vW; varying float vHand;
 void main() {
   mat4 s = uBones[int(aB.x)] * aW.x + uBones[int(aB.y)] * aW.y + uBones[int(aB.z)] * aW.z + uBones[int(aB.w)] * aW.w;
   vec4 w = uModel * s * vec4(aP, 1.0);
   vN = normalize(mat3(uModel) * mat3(s) * aN);
   vU = aU; vW = w.xyz;
+  vHand = aH;
   vec4 c = uVP * w;
   if (uSnap > 0.0) { c.xy = floor(c.xy / c.w * uSnap + 0.5) / uSnap * c.w; }
   gl_Position = c;
@@ -120,11 +121,11 @@ void main() {
 
 const FS = `
 precision mediump float;
-uniform sampler2D uTex; uniform vec4 uTint; uniform float uUnlit; uniform float uShine;
-varying vec3 vN; varying vec2 vU; varying vec3 vW;
+uniform sampler2D uTex; uniform vec4 uTint; uniform float uUnlit; uniform float uShine; uniform float uHandOnly;
+varying vec3 vN; varying vec2 vU; varying vec3 vW; varying float vHand;
 void main() {
   vec4 t = texture2D(uTex, vU) * uTint;
-  if (t.a < 0.4) discard;
+  if (t.a < 0.4 || (uHandOnly > 0.5 && vHand < 0.5)) discard;
   vec3 n = normalize(vN);
   float key = max(dot(n, normalize(vec3(-0.5, 0.8, 0.9))), 0.0);
   float fill = max(dot(n, normalize(vec3(0.8, 0.2, 0.4))), 0.0) * 0.25;
@@ -186,9 +187,12 @@ export class Guy {
     gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(p);
     this.prog = p;
     this.loc = {};
-    for (const n of ['aP', 'aN', 'aU', 'aB', 'aW']) this.loc[n] = gl.getAttribLocation(p, n);
-    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uTex', 'uTint', 'uUnlit', 'uShine']) this.loc[n] = gl.getUniformLocation(p, n);
+    for (const n of ['aP', 'aN', 'aU', 'aB', 'aW', 'aH']) this.loc[n] = gl.getAttribLocation(p, n);
+    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uTex', 'uTint', 'uUnlit', 'uShine', 'uHandOnly']) this.loc[n] = gl.getUniformLocation(p, n);
     this.body = this.mesh(data.pos, data.nor, data.uv, data.idx, data.bi, data.bw);
+    const hs = [this.byName['hand.l'], this.byName['hand.r']], hw = [];
+    for (let v = 0; v < data.bi.length / 4; v++) { let w = 0; for (let j = 0; j < 4; j++) if (hs.includes(data.bi[v * 4 + j])) w += data.bw[v * 4 + j]; hw.push(w); }
+    this.body.h = this.gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.body.h); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(hw), gl.STATIC_DRAW);
     this.skinTex = await this.texFromUrl(this.base + 'guy.png', false);
     this.white = this.texFromCanvas(Object.assign(document.createElement('canvas'), { width: 2, height: 2 }), '#fff');
 
@@ -502,7 +506,8 @@ export class Guy {
   bind(m) {
     const gl = this.gl, L = this.loc;
     const at = (loc, buf, n) => { if (loc < 0) return; if (buf) { gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 0, 0); } else gl.disableVertexAttribArray(loc); };
-    at(L.aP, m.p, 3); at(L.aN, m.n, 3); at(L.aU, m.u, 2); at(L.aB, m.b, 4); at(L.aW, m.w, 4);
+    at(L.aP, m.p, 3); at(L.aN, m.n, 3); at(L.aU, m.u, 2); at(L.aB, m.b, 4); at(L.aW, m.w, 4); at(L.aH, m.h, 1);
+    if (!m.h && L.aH >= 0) gl.vertexAttrib1f(L.aH, 0);
     if (!m.b) { gl.vertexAttrib4f(L.aB, 0, 0, 0, 0); gl.vertexAttrib4f(L.aW, 1, 0, 0, 0); }
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.i);
   }
@@ -534,6 +539,7 @@ export class Guy {
     gl.uniformMatrix4fv(L.uVP, false, VP);
     gl.uniform1f(L.uSnap, Math.min(c.width, c.height) * 0.35);
     gl.uniform1i(L.uTex, 0);
+    gl.uniform1f(L.uHandOnly, 0);
     gl.activeTexture(gl.TEXTURE0);
     const W = this.skeleton(cur);
     const skin = new Float32Array(16 * 24);
@@ -577,8 +583,8 @@ export class Guy {
         const l = Math.hypot(hp[0] - ep[0], hp[1] - ep[1], hp[2] - ep[2]);
         return [0, 1, 2].map(i => hp[i] + (hp[i] - ep[i]) / l * 0.05);
       };
-      const L = palm('l'), R = palm('r');
-      let rt = [L[0] - R[0], L[1] - R[1], L[2] - R[2]];
+      const PL = palm('l'), PR = palm('r');
+      let rt = [PL[0] - PR[0], PL[1] - PR[1], PL[2] - PR[2]];
       const span = Math.hypot(...rt); rt = rt.map(v => v / span);
       const tr = -cur.turn * Math.PI / 180;
       let fw = [Math.sin(tr) * 0.5, 0.15, Math.cos(tr)];
@@ -586,11 +592,23 @@ export class Guy {
       fw = fw.map((v, i) => v - rt[i] * d);
       const fl = Math.hypot(...fw); fw = fw.map(v => v / fl);
       const up = [fw[1] * rt[2] - fw[2] * rt[1], fw[2] * rt[0] - fw[0] * rt[2], fw[0] * rt[1] - fw[1] * rt[0]];
-      const c = [0, 1, 2].map(i => (L[i] + R[i]) / 2 + up[i] * 0.01 - fw[i] * 0.02);
-      const sx = (span + 0.05) / 0.5 * holdK, k = holdK;
+      const c = [0, 1, 2].map(i => (PL[i] + PR[i]) / 2 + up[i] * 0.01 + fw[i] * 0.035);
+      const sx = (span + 0.03) / 0.5 * holdK, k = holdK;
       const m = new Float32Array([rt[0] * sx, rt[1] * sx, rt[2] * sx, 0, up[0] * k, up[1] * k, up[2] * k, 0, fw[0] * k, fw[1] * k, fw[2] * k, 0, c[0], c[1], c[2], 1]);
       this.drawRigid(this.card, m, this.white, [0.16, 0.17, 0.13, 1]);
       this.drawRigid(this.cardFace, M4.mul(m, M4.fromQT([0, 0, 0, 1], [0, 0, 0.0115])), this.heldTex, [1, 1, 1, 1], 0.7);
+      if (this.state === 'hold' && this.blend > 0.6) {
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        this.bind(this.body);
+        gl.uniformMatrix4fv(L.uBones, false, skin);
+        gl.bindTexture(gl.TEXTURE_2D, this.skinTex);
+        gl.uniform4fv(L.uTint, [1, 1, 1, 1]);
+        gl.uniform1f(L.uUnlit, 0);
+        gl.uniform1f(L.uShine, 0);
+        gl.uniform1f(L.uHandOnly, 1);
+        gl.drawElements(gl.TRIANGLES, this.body.count, gl.UNSIGNED_SHORT, 0);
+        gl.uniform1f(L.uHandOnly, 0);
+      }
     }
     const loadK = this.state === 'loading' ? 1 : this.prev === 'loading' ? 1 - this.blend : 0;
     if (loadK > 0.01) this.drawRigid(this.watch, M4.mul(bw('lowerArm.l'), this.watchOff), this.white, [0.75, 0.68, 0.3, 1], 0, 1);
