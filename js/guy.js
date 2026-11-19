@@ -1332,3 +1332,5 @@ export class Guy {
     }
   }
 }
+
+export { M4, Q, ease, wave, lerp, box, merge, quad, mirror };

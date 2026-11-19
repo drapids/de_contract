@@ -2,3 +2,5 @@ data/
 dist/
 guytest.html
 node_modules/
+viewer.html
+data
