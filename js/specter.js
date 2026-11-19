@@ -6,7 +6,7 @@ function makeOverlay() {
   overlay.className = 'rl-box';
   overlay.innerHTML = '<b>steam said slow down</b><span class="rl-count"></span><button class="btn" type="button">skip</button>';
   overlay.querySelector('button').onclick = stop;
-  document.querySelector('#stage').append(overlay);
+  document.body.append(overlay);
 }
 
 function playMusic() {

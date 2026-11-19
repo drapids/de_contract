@@ -127,10 +127,11 @@ void main() {
 
 const FS = `
 precision mediump float;
-uniform sampler2D uTex; uniform vec4 uTint; uniform float uUnlit; uniform float uShine; uniform float uHandOnly;
+uniform sampler2D uTex; uniform vec4 uTint; uniform float uUnlit; uniform float uShine; uniform float uHandOnly; uniform float uHole;
 varying vec3 vN; varying vec2 vU; varying vec3 vW; varying float vHand;
 void main() {
   vec4 t = texture2D(uTex, vU) * uTint;
+  if (uHole > 0.5) { gl_FragColor = vec4(0.0); return; }
   if (t.a < 0.4 || (uHandOnly > 0.5 && vHand < 0.5)) discard;
   vec3 n = normalize(vN);
   float key = max(dot(n, normalize(vec3(-0.5, 0.8, 0.9))), 0.0);
@@ -189,7 +190,9 @@ export class Guy {
     this.fx.className = 'guy-fx';
     this.bubble = document.createElement('div');
     this.bubble.className = 'guy-bubble';
-    host.append(this.canvas, this.fx, this.bubble);
+    this.card2d = document.createElement('div');
+    this.card2d.className = 'guy-card';
+    host.append(this.card2d, this.canvas, this.fx, this.bubble);
     this.gl = this.canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: false });
     this.state = 'idle';
     this.fps = opts.fps ?? 15;
@@ -208,14 +211,22 @@ export class Guy {
     this.ready = this.load();
     host.addEventListener('pointermove', e => this.aim(e));
     window.addEventListener('pointermove', e => this.aim(e));
-    this.canvas.addEventListener('click', () => this.poke());
+    document.addEventListener('click', e => {
+      if (!this.hit || this.cineK > 0.1 || e.target.closest('button, a, input, select, textarea, label, .tu, .stone, .item, .dlg, .key')) return;
+      const h = this.hit;
+      if (e.clientX > h.x0 && e.clientX < h.x1 && e.clientY > h.y0 && e.clientY < h.y1) this.poke();
+    });
+    document.addEventListener('pointermove', e => {
+      const h = this.hit; if (!h) return;
+      document.body.classList.toggle('over-guy', e.clientX > h.x0 && e.clientX < h.x1 && e.clientY > h.y0 && e.clientY < h.y1 && !e.target.closest('button, a, input, select, .tu, .dlg'));
+    });
     for (const ev of ['pointermove', 'keydown', 'scroll', 'pointerdown']) window.addEventListener(ev, () => this.wake(), { passive: true });
     new ResizeObserver(() => this.resize()).observe(host);
   }
 
   aim(e) {
-    const r = this.canvas.getBoundingClientRect();
-    const hx = r.left + r.width * 0.5, hy = r.top + r.height * 0.22;
+    const hb = this.hit ? [(this.hit.x0 + this.hit.x1) / 2, this.hit.y0 + 30] : [innerWidth * 0.8, innerHeight * 0.3];
+    const hx = hb[0], hy = hb[1];
     this.lookT = [Math.max(-1, Math.min(1, (e.clientX - hx) / 500)), Math.max(-1, Math.min(1, (e.clientY - hy) / 400))];
   }
 
@@ -238,7 +249,7 @@ export class Guy {
     this.prog = p;
     this.loc = {};
     for (const n of ['aP', 'aN', 'aU', 'aB', 'aW', 'aH']) this.loc[n] = gl.getAttribLocation(p, n);
-    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uTex', 'uTint', 'uUnlit', 'uShine', 'uHandOnly']) this.loc[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uTex', 'uTint', 'uUnlit', 'uShine', 'uHandOnly', 'uHole']) this.loc[n] = gl.getUniformLocation(p, n);
     this.baseRig = await this.makeRig(data, this.base + 'guy.png');
     this.applyRig(this.baseRig);
     this.white = this.texFromCanvas(Object.assign(document.createElement('canvas'), { width: 2, height: 2 }), '#fff');
@@ -452,20 +463,22 @@ export class Guy {
     this.signTex = this.texFromCanvas(c);
   }
 
-  async hold(url, name) {
-    let tex = null;
-    if (url) { try { tex = await this.texFromUrl(url); } catch (e) { tex = null; } }
-    if (!tex) {
-      const c = document.createElement('canvas'); c.width = 256; c.height = 128;
-      const x = c.getContext('2d');
-      x.fillStyle = '#2b2f24'; x.fillRect(0, 0, 256, 128);
-      x.fillStyle = '#c7b98b'; x.font = 'bold 20px Tahoma, sans-serif'; x.textAlign = 'center';
-      x.fillText((name || '???').slice(0, 24), 128, 70);
-      tex = this.texFromCanvas(c);
-    }
-    if (this.heldTex) this.gl.deleteTexture(this.heldTex);
-    this.heldTex = tex;
+  async hold(url, name, meta = {}) {
+    this.card2d.innerHTML = url ? `<img src="${url.replace(/"/g, '')}" alt="">` : '';
+    this.card2d.dataset.name = name || '';
+    this.heldTex = this.white;
+    this.holdMeta = meta;
     this.set('hold');
+    this.verdictSaid = false;
+  }
+
+  verdict() {
+    const m = this.holdMeta || {}, n = (this.card2d.dataset.name || '').toLowerCase();
+    if (n.includes('★')) return pick(['oh thats a KNIFE knife', 'imagine pulling this', 'yeah i want this one']);
+    if (m.profit > 0) return pick(['clean. and it prints', 'this ones free money', 'look at it. LOOK at it']);
+    if (m.profit < 0) return pick(['kinda mid ngl', 'not worth it bro', 'ehh. pass']);
+    if (m.tier >= 5) return pick(['red skin red skin', 'thats a nice one', 'ok this is fire']);
+    return pick(['solid', 'its a skin i guess', 'clean', 'id run it']);
   }
 
   set(state, hold) {
@@ -506,6 +519,7 @@ export class Guy {
     if (this.state === 'push' && st > 5.5) this.set('walkin');
     if (this.state === 'walkin' && st > 2.8) this.set('idle');
     const quiet = performance.now() - (this.active || 0);
+    if (this.state === 'hold' && st > 1.6 && !this.verdictSaid) { this.verdictSaid = true; this.say(this.verdict(), 2600); }
     if (this.state === 'hold' && st > 9 && !this.snatched) { this.snatched = true; if (Math.random() < 0.35) this.snatch(); }
     if (this.state !== 'hold') this.snatched = false;
     if (this.state === 'idle' && !this.locked) {
@@ -668,7 +682,36 @@ export class Guy {
   burst() {
     const w = this.fx.width, h = this.fx.height;
     const cols = ['#4fb33a', '#e8c547', '#d9d2b8', '#c9472b', '#7aa0c4'];
-    for (let i = 0; i < 90; i++) this.confetti.push({ x: w * 0.5, y: h * 0.18, vx: (Math.random() - 0.5) * w * 1.6, vy: -Math.random() * h * 1.2, r: Math.random() * 6, c: cols[i % cols.length], life: 2 + Math.random() });
+    for (let i = 0; i < 160; i++) {
+      const side = i % 2 ? 1 : -1;
+      this.confetti.push({ x: side > 0 ? w : 0, y: h * (0.75 + Math.random() * 0.2), vx: -side * (0.25 + Math.random() * 0.75) * w, vy: -(0.9 + Math.random() * 0.9) * h, r: Math.random() * 6, c: cols[i % cols.length], life: 2.6 + Math.random() * 1.4 });
+    }
+    for (let i = 0; i < 60; i++) this.confetti.push({ x: Math.random() * w, y: -10 - Math.random() * h * 0.3, vx: (Math.random() - 0.5) * 60, vy: Math.random() * 40, r: Math.random() * 6, c: cols[i % cols.length], life: 3 + Math.random() * 2 });
+  }
+
+  camera(asp) {
+    const z = ease(this.zoom), w = ease(this.wide), k = ease(this.cineK || 0);
+    const narrow = this.host.clientWidth < 900;
+    const anchor = this.anchor ?? (narrow ? 0.62 : 0.66);
+    const dist = (narrow ? 7.2 : 5.4) + w * 1.2 - z * 1.9;
+    let eye = [this.pos[0] * 0, lerp(1.3, 1.45, z) + w * 0.25, dist];
+    let tgt = [0, lerp(1.24, 1.3, z) + w * 0.25, 0];
+    let shift = anchor;
+    if (k > 0) {
+      const c = this.cineCam || { eye: [1.7, 0.45, 1.5], tgt: [0, 1.25, 0.25] };
+      eye = eye.map((v, i) => lerp(v, c.eye[i], k));
+      tgt = tgt.map((v, i) => lerp(v, c.tgt[i], k));
+      shift = lerp(anchor, 0, k);
+    }
+    const P = M4.persp(lerp(0.5, 0.95, k), asp, 0.05, 30);
+    P[8] = -shift;
+    return M4.mul(P, M4.look(eye, tgt, [0, 1, 0]));
+  }
+
+  screen(p) {
+    const v = this.VP, x = v[0] * p[0] + v[4] * p[1] + v[8] * p[2] + v[12], y = v[1] * p[0] + v[5] * p[1] + v[9] * p[2] + v[13], w = v[3] * p[0] + v[7] * p[1] + v[11] * p[2] + v[15];
+    const r = this.host.getBoundingClientRect();
+    return [(x / w * 0.5 + 0.5) * r.width, (0.5 - y / w * 0.5) * r.height];
   }
 
   resize() {
@@ -755,12 +798,13 @@ export class Guy {
       const H = [[-12, -26, -80], [0, -73, 26], [0, 0, 0]];
       const cy = t % 14;
       const seg = (a, b) => cy < a || cy > b ? 0 : Math.sin((cy - a) / (b - a) * Math.PI);
-      const lookCard = seg(0, 3.2), around = seg(3, 6.6), bop = seg(6.4, 10.6), sigh = seg(10.4, 14);
+      const lookCard = seg(0, 3.4), around = seg(3.2, 6.6), bop = seg(6.4, 10.6), sigh = seg(10.4, 14);
+      const nod = cy > 1 && cy < 3 ? Math.sin((cy - 1) * Math.PI * 3) * 7 : 0;
       const beat = wave(t, 1.9);
       p = mirror({ ...arms, 'upperArm.l': [H[0][0] - sigh * 4, H[0][1], H[0][2]], 'lowerArm.l': H[1], 'hand.l': H[2] });
       p.chest = [2 + breathe + bop * Math.abs(beat) * 2 - sigh * 5, wave(t, 0.13) * 3, 0];
       p.head = [
-        lk[1] * 8 + lookCard * 26 + around * wave(cy, 0.45) * 14 - sigh * 22 + bop * beat * 9,
+        lk[1] * 8 + lookCard * 30 + nod + around * wave(cy, 0.45) * 14 - sigh * 22 + bop * beat * 9,
         lk[0] * 18 + around * wave(cy, 0.3) * 50,
         bop * wave(t, 0.95) * 6 + around * 4
       ];
@@ -891,11 +935,8 @@ export class Guy {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
     gl.useProgram(this.prog);
-    const asp = c.width / c.height;
-    const fov = asp < 0.75 ? 0.5 / Math.max(0.55, asp / 0.75) : 0.5;
-    const z = ease(this.zoom);
-    const w = ease(this.wide);
-    const VP = M4.mul(M4.persp(fov, asp, 0.1, 20), M4.look([lerp(0, 0.1, z), lerp(1.12, 1.38, z) + w * 0.3, lerp(5.2, 2.8, z) + w * 1.3], [lerp(0, 0.08, z), lerp(1.0, 1.2, z) + w * 0.3, 0], [0, 1, 0]));
+    const VP = this.camera(c.width / c.height);
+    this.VP = VP;
     if (this.sceneTurn != null) cur.turn = this.sceneTurn;
     const pos = this.pos || [0, 0, 0];
     const model = M4.mul(M4.fromQT([0, 0, 0, 1], pos), M4.rotY(cur.turn * Math.PI / 180));
@@ -903,6 +944,7 @@ export class Guy {
     gl.uniform1f(L.uSnap, Math.min(c.width, c.height) * 0.35);
     gl.uniform1i(L.uTex, 0);
     gl.uniform1f(L.uHandOnly, 0);
+    gl.uniform1f(L.uHole, 0);
     gl.activeTexture(gl.TEXTURE0);
     const W = this.skeleton(cur);
     const skin = new Float32Array(16 * 24);
@@ -920,6 +962,14 @@ export class Guy {
     gl.drawElements(gl.TRIANGLES, this.body.count, gl.UNSIGNED_SHORT, 0);
 
     const bw = n => W[this.byName[n]];
+    {
+      const toW = p => { const v = [p[12], p[13], p[14]]; return [model[0] * v[0] + model[4] * v[1] + model[8] * v[2] + model[12], model[1] * v[0] + model[5] * v[1] + model[9] * v[2] + model[13], model[2] * v[0] + model[6] * v[1] + model[10] * v[2] + model[14]]; };
+      const hd = this.screen(toW(bw('head'))), ft = this.screen(toW(bw('foot.l'))), hp = this.screen(toW(bw('hip')));
+      const top = hd[1] - (ft[1] - hd[1]) * 0.12, half = (ft[1] - top) * 0.22;
+      this.hit = { x0: hp[0] - half, x1: hp[0] + half, y0: top, y1: ft[1] + 10 };
+      this.bubble.style.left = Math.round(hd[0]) + 'px';
+      this.bubble.style.top = Math.round(top - 8) + 'px';
+    }
     if (this.glasses > 0) {
       const drop = this.state === 'dubs' ? (1 - back(this.glasses)) * 0.9 : 0;
       const fade = this.state === 'dubs' ? 1 : this.glasses;
@@ -961,7 +1011,15 @@ export class Guy {
       const sx = (span + 0.03) / 0.5 * holdK, k = holdK;
       const m = new Float32Array([rt[0] * sx, rt[1] * sx, rt[2] * sx, 0, up[0] * k, up[1] * k, up[2] * k, 0, fw[0] * k, fw[1] * k, fw[2] * k, 0, c[0], c[1], c[2], 1]);
       this.drawRigid(this.card, m, this.white, [0.16, 0.17, 0.13, 1]);
-      this.drawRigid(this.cardFace, M4.mul(m, M4.fromQT([0, 0, 0, 1], [0, 0, 0.0115])), this.heldTex, [1, 1, 1, 1], 0.7);
+      const fm = M4.mul(m, M4.fromQT([0, 0, 0, 1], [0, 0, 0.0115]));
+      gl.uniform1f(L.uHole, 1);
+      this.drawRigid(this.cardFace, fm, this.white);
+      gl.uniform1f(L.uHole, 0);
+      const corner = (x, y) => { const p = [fm[0] * x + fm[4] * y + fm[12], fm[1] * x + fm[5] * y + fm[13], fm[2] * x + fm[6] * y + fm[14]]; return this.screen([model[0] * p[0] + model[4] * p[1] + model[8] * p[2] + model[12], model[1] * p[0] + model[5] * p[1] + model[9] * p[2] + model[13], model[2] * p[0] + model[6] * p[1] + model[10] * p[2] + model[14]]); };
+      const tl = corner(-0.24, 0.12), tr2 = corner(0.24, 0.12), bl = corner(-0.24, -0.12);
+      this.card2d.style.transform = `matrix(${(tr2[0] - tl[0]) / 240},${(tr2[1] - tl[1]) / 240},${(bl[0] - tl[0]) / 120},${(bl[1] - tl[1]) / 120},${tl[0]},${tl[1]})`;
+      this.card2d.style.opacity = 1;
+      this.cardShown = true;
       if (this.state === 'hold' && this.blend > 0.6) {
         gl.clear(gl.DEPTH_BUFFER_BIT);
         this.bind(this.body);
@@ -1004,6 +1062,7 @@ export class Guy {
     }
     if (this.spook.on) this.drawSpook(VP, now);
     this.drawShots(VP, now);
+    if (holdK <= 0.01 && this.cardShown) { this.card2d.style.opacity = 0; this.cardShown = false; }
     const loadK = this.state === 'watch' ? 1 : this.prev === 'watch' ? 1 - this.blend : 0;
     this.watchOff ||= this.rebase('lowerArm.l', M4.fromQT([0, 0, 0, 1], [0.76, 1.425, 0.035]));
     if (loadK > 0.01) this.drawRigid(this.watch, M4.mul(bw('lowerArm.l'), this.watchOff), this.white, [0.75, 0.68, 0.3, 1], 0, 1);
@@ -1117,10 +1176,10 @@ export class Guy {
     if (!this.confetti.length) return;
     this.confetti = this.confetti.filter(p => (p.life -= dt) > 0);
     for (const p of this.confetti) {
-      p.vy += h * 1.4 * dt; p.vx *= 0.985;
-      p.x += p.vx * dt * 0.5; p.y += p.vy * dt * 0.5; p.r += dt * 8;
+      p.vy += h * 0.9 * dt; p.vx *= 0.99; p.vy = Math.min(p.vy, h * 0.35);
+      p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 8;
       x.save(); x.translate(p.x | 0, p.y | 0); x.rotate(p.r);
-      x.fillStyle = p.c; x.fillRect(-3, -1.5, 6, 3);
+      x.fillStyle = p.c; x.fillRect(-4, -2, 8, 4);
       x.restore();
     }
   }

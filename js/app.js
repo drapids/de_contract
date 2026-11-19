@@ -114,7 +114,7 @@ function openTrade(t) {
   history.replaceState(null, '', '#t=' + encodeURIComponent(t.id));
   const best = [...t.outs].sort((a, b) => b[3] - a[3])[0];
   if (guy) {
-    guy.hold(best[5], best[0]);
+    guy.hold(best[5], best[0], { profit: best[3] - t.cost, tier: t.tier + 1 });
     clearTimeout(S.reactTimer);
     S.reactTimer = setTimeout(() => {
       if ($('#modal').hidden) return;
@@ -400,10 +400,11 @@ function bind() {
 
   const st = S.settings;
   $('#s-worker').value = st.worker; $('#s-guy').checked = st.guy; $('#s-music').checked = st.music;
-  const save = () => { S.settings = { worker: $('#s-worker').value.trim(), guy: $('#s-guy').checked, music: $('#s-music').checked }; store.set('settings', S.settings); $('#stage').hidden = !S.settings.guy; };
+  const save = () => { S.settings = { worker: $('#s-worker').value.trim(), guy: $('#s-guy').checked, music: $('#s-music').checked }; store.set('settings', S.settings); $('#guy').hidden = !S.settings.guy; document.body.classList.toggle('noguy', !S.settings.guy); };
   for (const id of ['#s-worker', '#s-guy', '#s-music']) $(id).addEventListener('change', save);
   $('#s-scene').onclick = () => window.dispatchEvent(new CustomEvent('dc:ratelimit', { detail: { retry: 30, manual: true } }));
-  $('#stage').hidden = !st.guy;
+  $('#guy').hidden = !st.guy;
+  document.body.classList.toggle('noguy', !st.guy);
 }
 
 tierOptions($('#g-tier'));
