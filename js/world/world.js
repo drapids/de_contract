@@ -7,6 +7,8 @@ import { Chess } from './chess.js';
 import { Bank } from './bank.js';
 import { Loot } from './loot.js';
 import { Wheel } from './wheel.js';
+import { Events } from './events.js';
+import { Blyat } from './blyat.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -52,6 +54,8 @@ export class World {
     this.bank = new Bank(this);
     this.loot = new Loot(this);
     this.wheel = new Wheel(this);
+    this.events = new Events(this);
+    this.blyat = new Blyat(this);
     const emit = opts.onEvent;
     this.opts.onEvent = (ev, x) => { this.event(ev, x); emit?.(ev, x); };
     this.npcs = [];
@@ -99,6 +103,7 @@ export class World {
     await this.av.load(this.opts.skin || 'sas');
     await Promise.all([this.buildBasement(), this.buildYard()]);
     this.chess.build();
+    await this.events.build();
     this.go('basement', true);
   }
 
@@ -395,6 +400,7 @@ export class World {
 
   stand() {
     this.seated = false;
+    this.events?.wake();
     this.av.play('Sitting_Exit', true);
     this.busy = true;
     this.av.onDone = () => { this.busy = false; this.av.play('Idle_Loop'); };
@@ -477,6 +483,14 @@ export class World {
       av.update(dt); if (this.durak.g) this.durak.foe.update(dt);
       av.pos = [T[0], 0, T[2] - 0.62]; av.yaw = 0;
       this.durak.foe.pos = [T[0], 0, T[2] + 0.62]; this.durak.foe.yaw = Math.PI;
+      return;
+    }
+    if (this.scared) {
+      this.scared.t -= dt;
+      av.pos[0] += this.scared.v[0] * dt * Math.max(0, this.scared.t - 1.2); av.pos[2] += this.scared.v[1] * dt * Math.max(0, this.scared.t - 1.2);
+      this.collide(av.pos, 0.28);
+      if (this.scared.t <= 0) { this.scared = null; av.play('Idle_Loop'); }
+      av.update(dt);
       return;
     }
     let ix = 0, iz = 0;
@@ -569,6 +583,7 @@ export class World {
     if (!this.scene) return;
     this.step(dt, now);
     this.chickenStep(dt, now);
+    this.events.update(dt, now);
     const f = this.flick;
     if (now > f.next) { f.until = now + 0.15 + Math.random() * 0.5; f.next = now + 4 + Math.random() * 14; }
     f.k = now < f.until ? (Math.random() < 0.5 ? 0.15 : 0.9) : 1;
@@ -595,6 +610,7 @@ export class World {
     if (sc === this.scenes.basement) this.chess.draw();
     for (const n of this.npcs) if (this.scenes[n.scene] === sc) { n.av.update(Math.min(dt, 0.05)); n.av.draw(); }
     if (sc === this.scenes.yard) this.drawYardExtras(now);
+    this.events.draw(now);
     if (this.chessOn && this.chess.g) this.chess.foe.draw();
     if (this.match) this.arm.foe.draw();
     if (this.durakOn && this.durak.g) this.durak.foe.draw();

@@ -422,3 +422,45 @@ body .world-ui:has(.ch-hud:not([hidden])) .bank { top: auto; bottom: 10px; }
 .wh-n:hover { filter: brightness(1.15); }
 .wh-msg { min-height: 32px; font-size: 11px; }
 @media (max-width: 600px) { .wh-body { flex-direction: column; } }
+
+.bk-book { background: #5c1418 !important; color: #f0d6b0 !important; }
+.flashbang { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 5; }
+.flashbang.go { animation: flashbang 4.2s ease-out forwards; }
+@keyframes flashbang { 0% { opacity: 0; } 3% { opacity: 1; } 45% { opacity: 1; } 100% { opacity: 0; } }
+.nmarket { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: auto; background: radial-gradient(rgba(20,10,40,.55), rgba(5,5,15,.85)); }
+.nmarket[hidden] { display: none; }
+.nm-win { width: min(760px, 94vw); padding: 14px; background: linear-gradient(#1a1630, #0e0c1c); border: 2px solid #7a6cff; box-shadow: 0 0 30px rgba(122,108,255,.4), 6px 6px 0 #000; color: #e8e4ff; }
+.nm-t { display: flex; align-items: center; gap: 12px; }
+.nm-t b { font: bold 22px Impact, Verdana, sans-serif; letter-spacing: 3px; color: #c8bfff; text-shadow: 0 0 8px #7a6cff; }
+.nm-t span { flex: 1; color: #9b94c9; }
+.nm-t .x { background: none; border: 1px solid #7a6cff; color: #c8bfff; cursor: pointer; }
+.nm-sub { color: #9b94c9; margin: 4px 0 12px; }
+.nm-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.nm-card { height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: repeating-linear-gradient(135deg, #241f45 0 8px, #1d1938 8px 16px); border: 2px solid #4b4390; cursor: pointer; text-align: center; padding: 6px; transition: transform .15s; }
+.nm-card:hover { transform: translateY(-3px); border-color: #a99cff; }
+.nm-card > span { font: bold 60px Impact, sans-serif; color: #4b4390; }
+.nm-card.open { background: linear-gradient(#2a2550, #18152e); border-color: var(--c); cursor: default; }
+.nm-card.got { opacity: .45; }
+.nm-card img { width: 120px; height: 80px; object-fit: contain; }
+.nm-card b { font-size: 11px; font-weight: normal; }
+.nm-card s { color: #8a84b5; font-size: 11px; }
+.nm-card em { font: bold 18px Impact, sans-serif; color: #7dff9b; font-style: normal; }
+.blyat { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: auto; background: rgba(0,0,0,.35); }
+.blyat[hidden] { display: none; }
+.by-book { width: min(620px, 94vw); max-height: 86vh; display: flex; flex-direction: column; background: #e9dfc7; color: #2a1a12; border: 10px solid #5c1418; border-left-width: 22px; border-radius: 4px 8px 8px 4px; box-shadow: 8px 8px 0 rgba(0,0,0,.5); }
+.by-cover { display: flex; align-items: baseline; gap: 10px; background: #5c1418; color: #f0d6b0; padding: 6px 10px 10px; }
+.by-cover b { font: bold 26px Georgia, serif; letter-spacing: 3px; }
+.by-cover span { flex: 1; font-style: italic; }
+.by-x { background: none; border: 1px solid #f0d6b0; color: #f0d6b0; cursor: pointer; }
+.by-tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 8px 8px 0; }
+.by-tabs button { background: #d4c6a4; border: 1px solid #8a6d4a; padding: 2px 8px; cursor: pointer; font: 12px Georgia, serif; color: #3a2416; }
+.by-tabs button.on { background: #5c1418; color: #f0d6b0; }
+.by-tr { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px dashed #8a6d4a; }
+.by-tr input { flex: 0 0 200px; background: #f6efdc; border: 1px solid #8a6d4a; padding: 3px 6px; font: 13px Georgia, serif; color: #2a1a12; }
+.by-out { font: 13px Georgia, serif; }
+.by-out button, .by-row button { background: none; border: 1px solid #8a6d4a; cursor: pointer; padding: 0 5px; }
+.by-list { overflow: auto; padding: 4px 10px 10px; }
+.by-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(138,109,74,.35); }
+.by-row b { font: bold 16px Georgia, serif; margin-right: 8px; }
+.by-row i { color: #7a5a3a; margin-right: 8px; }
+.by-row span { color: #3a2a20; font-size: 12px; }
