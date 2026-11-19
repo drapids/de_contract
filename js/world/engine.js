@@ -2,7 +2,7 @@ import { M4, Q, box, merge, quad } from '../guy.js';
 
 const VS = `
 attribute vec3 aP; attribute vec3 aN; attribute vec2 aU; attribute vec4 aB; attribute vec4 aW;
-uniform mat4 uBones[20]; uniform mat4 uVP; uniform mat4 uModel; uniform float uSnap; uniform float uSkinned;
+uniform mat4 uBones[24]; uniform mat4 uVP; uniform mat4 uModel; uniform float uSnap; uniform float uSkinned;
 varying vec3 vN; varying vec2 vU; varying vec3 vW; varying float vD;
 void main() {
   mat4 s = uSkinned > 0.5 ? uBones[int(aB.x)] * aW.x + uBones[int(aB.y)] * aW.y + uBones[int(aB.z)] * aW.z + uBones[int(aB.w)] * aW.w : mat4(1.0);
@@ -84,12 +84,12 @@ export class Engine {
     return { p: this.buf(g.P), n: this.buf(g.N), u: this.buf(g.U), b: extra.B ? this.buf(extra.B) : null, w: extra.W ? this.buf(extra.W) : null, i: this.buf(g.I, big ? Uint32Array : Uint16Array, this.gl.ELEMENT_ARRAY_BUFFER), count: g.I.length, big };
   }
 
-  texCanvas(c, fill, repeat) {
+  texCanvas(c, fill, repeat, flip = false) {
     const gl = this.gl;
     if (fill) { const x = c.getContext('2d'); x.fillStyle = fill; x.fillRect(0, 0, c.width, c.height); }
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flip);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -105,12 +105,13 @@ export class Engine {
     return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
   }
 
-  async texUrl(url, repeat = true) {
-    if (this.texCache[url]) return this.texCache[url];
+  async texUrl(url, repeat = true, flip = false) {
+    const key = url + (flip ? '#f' : '');
+    if (this.texCache[key]) return this.texCache[key];
     const im = await this.img(url);
     const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
     c.getContext('2d').drawImage(im, 0, 0);
-    return (this.texCache[url] = this.texCanvas(c, null, repeat));
+    return (this.texCache[key] = this.texCanvas(c, null, repeat, flip));
   }
 
   async json(url) {
