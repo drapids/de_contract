@@ -177,8 +177,17 @@ const CFG = {
   shock: { clip: 'Idle_No_Loop', look: 0.2 },
   scared: { clip: 'Hit_Head', once: true, next: 'shock' },
   defuse: { clip: 'Fixing_Kneeling', look: 0, turn: 0 },
-  rise: { clip: 'Sitting_Exit', once: true, next: 'yes', turn: 0 }
+  rise: { clip: 'Sitting_Exit', once: true, next: 'yes', turn: 0 },
+  rollout: { clip: 'Roll', once: true, next: 'leave', turn: 80 },
+  leave: { clip: 'Jog_Fwd_Loop', look: 0, turn: 90 },
+  gone: { clip: 'Idle_Loop', look: 0 },
+  enterrun: { clip: 'Jog_Fwd_Loop', look: 0, turn: -90 },
+  enterroll: { clip: 'Roll', once: true, next: 'idle', turn: -80 },
+  falling: { clip: 'Jump_Start', look: 0, freeze: true },
+  land: { clip: 'Jump_Land', once: true, next: 'idle' },
+  drag: { clip: 'Zombie_Idle_Loop', look: 0, turn: 0 }
 };
+const DRAG = ['эй!', 'отпусти блять', 'куда тащишь', 'я не чемодан', 'aaaa'];
 
 export class Guy {
   constructor(host, opts = {}) {
@@ -214,7 +223,11 @@ export class Guy {
     this.ready = this.load();
     host.addEventListener('pointermove', e => this.aim(e));
     window.addEventListener('pointermove', e => this.aim(e));
+    document.addEventListener('pointerdown', e => this.dragStart(e));
+    window.addEventListener('pointermove', e => this.dragMove(e));
+    window.addEventListener('pointerup', e => this.dragEnd(e));
     document.addEventListener('click', e => {
+      if (this.dragMoved) { this.dragMoved = false; return; }
       if (!this.hit || this.cineK > 0.1 || e.target.closest('button, a, input, select, textarea, label, .tu, .stone, .item, .dlg, .key')) return;
       const h = this.hit;
       if (e.clientX > h.x0 && e.clientX < h.x1 && e.clientY > h.y0 && e.clientY < h.y1) this.poke();
@@ -614,14 +627,80 @@ export class Guy {
     if (hold) this.holdTimer = setTimeout(() => this.set('idle'), hold);
   }
 
-  busy() { return this.locked || ['push', 'walkin', 'sitdown', 'standup', 'roll', 'pickup'].includes(this.state); }
+  busy() { return this.locked || ['push', 'walkin', 'sitdown', 'standup', 'roll', 'pickup', 'rollout', 'leave', 'gone', 'enterrun', 'enterroll', 'falling', 'land', 'drag'].includes(this.state); }
+
+  inHit(e) {
+    const h = this.hit;
+    return h && e.clientX > h.x0 && e.clientX < h.x1 && e.clientY > h.y0 && e.clientY < h.y1;
+  }
+
+  dragStart(e) {
+    if (this.paused || this.busy() || this.cineK > 0.1 || this.state === 'hold' || !this.inHit(e) || e.target.closest('button, a, input, select, textarea, label, .tu, .dlg, .key, .modal')) return;
+    const a = this.screen([this.pos[0], 1, 0]), b = this.screen([this.pos[0] + 1, 1, 0]);
+    this.drag = { x0: e.clientX, p0: this.pos[0], k: 1 / Math.max(1, b[0] - a[0]), moved: false };
+  }
+
+  dragMove(e) {
+    const d = this.drag;
+    if (!d) return;
+    const dx = e.clientX - d.x0;
+    if (!d.moved && Math.abs(dx) < 8) return;
+    if (!d.moved) { d.moved = true; this.back = 'idle'; this.set('drag'); this.say(pick(DRAG), 1600); document.body.classList.add('dragging-guy'); }
+    const r = this.host.getBoundingClientRect();
+    let x = d.p0 + dx * d.k;
+    const sx = this.screen([x, 1, 0])[0];
+    if (sx < 60) x += (60 - sx) * d.k;
+    if (sx > r.width - 60) x -= (sx - r.width + 60) * d.k;
+    this.dragV = x - this.pos[0];
+    this.pos[0] = x;
+    this.pos[1] = 0.14;
+  }
+
+  dragEnd() {
+    const d = this.drag;
+    this.drag = null;
+    if (!d?.moved) return;
+    this.dragMoved = true;
+    setTimeout(() => this.dragMoved = false, 50);
+    document.body.classList.remove('dragging-guy');
+    this.homeX = this.pos[0];
+    this.fall = { y: this.pos[1], v: 0 };
+    this.set('falling');
+  }
+
+  comeback() {
+    let b = document.querySelector('.comeback');
+    if (!b) {
+      b = document.createElement('button');
+      b.className = 'comeback';
+      b.textContent = 'вернись сюда';
+      document.body.append(b);
+      b.onclick = () => {
+        if (b.classList.contains('boom')) return;
+        b.classList.add('boom');
+        this.emit('shot');
+        const r = b.getBoundingClientRect(), hr = this.fx.getBoundingClientRect();
+        for (let i = 0; i < 50; i++) this.confetti.push({ x: (r.left + r.width / 2 - hr.left) * this.fx.width / hr.width, y: (r.top + r.height / 2 - hr.top) * this.fx.height / hr.height, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 260, r: Math.random() * 6, life: 1.4 + Math.random(), c: pick(['#e8d36a', '#d9694f', '#8fd16f', '#eee']) });
+        setTimeout(() => { b.remove(); this.enter(); }, 450);
+      };
+    }
+    b.hidden = false;
+  }
+
+  enter() {
+    const how = pick(['run', 'roll', 'drop']);
+    this.homeX = 0;
+    if (how === 'drop') { this.pos = [0, 3.2, 0]; this.fall = { y: 3.2, v: 0 }; this.set('falling'); this.say('Я ВЕРНУЛСЯ', 1600); }
+    else if (how === 'roll') { this.pos = [1.6, 0, 0]; this.set('enterroll'); this.say('соскучился?', 1600); }
+    else { this.pos = [4.5, 0, 0]; this.set('enterrun'); this.say(pick(['ладно ладно', 'иду иду', 'чё надо']), 1600); }
+  }
 
   poke() {
     if (this.busy()) return;
     const now = performance.now();
     this.pokeLog = (this.pokeLog || []).filter(t => now - t < 3500).concat(now);
     if (this.state === 'sit') return this.set('standup');
-    if (this.pokeLog.length >= 5) { this.pokeLog = []; this.say('ight im out', 1500); return this.set('roll'); }
+    if (this.pokeLog.length >= 5) { this.pokeLog = []; this.say('ight im out', 1500); return this.set('rollout'); }
     this.say(LINES.poke[(this.pokes = (this.pokes || 0) + 1) % LINES.poke.length], 1800);
     this.back = CFG[this.state]?.once ? this.back : this.state;
     this.set('hit');
@@ -630,7 +709,11 @@ export class Guy {
   push() { if (!this.busy()) this.set('push'); }
 
   tick(now, st) {
-    const c = CFG[this.state];
+    const c = CFG[this.state], dt = this.dtv || 0.016;
+    if (this.state === 'leave') { this.pos[0] += 3.4 * dt; if (this.screen([this.pos[0] - 0.6, 1, 0])[0] > this.host.clientWidth) { this.set('gone'); this.comeback(); } }
+    if (this.state === 'enterrun') { this.pos[0] = Math.max(0, this.pos[0] - 3.4 * dt); if (this.pos[0] <= 0) this.set('idle'); }
+    if (this.state === 'enterroll') this.pos[0] = Math.max(0, this.pos[0] - 1.2 * dt);
+    if (this.state === 'falling' && this.fall) { this.fall.v -= 9.8 * dt; this.fall.y += this.fall.v * dt; this.pos[1] = Math.max(0, this.fall.y); if (this.fall.y <= 0) { this.fall = null; this.pos[1] = 0; this.set('land'); this.emit('poke'); } }
     if (c?.once && this.clips[c.clip] && st > this.clips[c.clip].d + (c.hold || 0)) {
       const next = c.next === 'back' ? (this.back || 'idle') : c.next;
       this.set(next || 'idle');
@@ -1033,6 +1116,7 @@ export class Guy {
     this.wide = Math.max(0, Math.min(1, (this.wide || 0) + (this.state === 'dubs' ? dt : -dt) * 2.5));
     this.now = now;
     if (this.state === 'type' && real - (this.lastKey || 0) > 0.07 + Math.random() * 0.12) { this.lastKey = real; this.emit('key'); }
+    this.dtv = dt;
     this.runScene(dt);
     this.tick(now, st);
     this.draw(cur, now, st);
@@ -1090,6 +1174,8 @@ export class Guy {
     gl.useProgram(this.prog);
     const VP = this.camera(c.width / c.height);
     this.VP = VP;
+    if (this.state === 'gone') { this.hit = null; return; }
+    if (this.state === 'drag') { cur.turn = Math.max(-40, Math.min(40, -(this.dragV || 0) * 900)); this.dragV *= 0.8; }
     if (this.sceneTurn != null) cur.turn = this.sceneTurn;
     const pos = this.pos || [0, 0, 0];
     const model = M4.mul(M4.fromQT([0, 0, 0, 1], pos), M4.rotY(cur.turn * Math.PI / 180));
