@@ -73,9 +73,15 @@ function renderGuaranteed() {
   const key = { pct: t => -(t.worst - t.cost) / t.cost, usd: t => -(t.worst - t.cost), ev: t => -(t.ev - t.cost), cost: t => t.cost, new: t => -(t.born || 0) }[$('#g-sort').value];
   list.sort((a, b) => key(a) - key(b));
   pend.sort((a, b) => key(a) - key(b));
-  $('#g-list').innerHTML = (list.length ? head + list.map(row).join('') :
+  $('#g-list').innerHTML = (list.length ? head + list.map(row).join('') : warming() ||
     `<div class="empty">nothing confirmed right now.<br>every one here gets double checked on steam first, so this is usually short.</div>`) +
     (pend.length ? `<div class="pend-h">still checking on steam (${pend.length}) <span class="dim">· prices look good but not confirmed yet, dont buy off these</span></div>` + pend.map(row).join('').replaceAll('class="tu sure', 'class="tu pend') : '');
+}
+
+function warming() {
+  const so = S.data?.sources || {}, have = so.steam || 0, tot = so.steamTotal || 0;
+  if (!tot || have >= tot * 0.8) return '';
+  return `<div class="empty">still pulling prices off steam: ${have} / ${tot} so far (${Math.round(have / tot * 100)}%).<br>steam only gives ~7000 per scan so after a fresh start it takes a few scans before trade ups show up.</div>`;
 }
 
 function renderBrowse() {
@@ -90,7 +96,7 @@ function renderBrowse() {
     (!q || t.in.some(i => i[0].toLowerCase().includes(q)) || t.outs.some(o => o[0].toLowerCase().includes(q))));
   const key = { roi: t => -t.roi, win: t => -t.win, profit: t => -(t.ev - t.cost), best: t => -(t.best - t.cost), safe: t => t.cost - t.worst, cost: t => t.cost }[sort];
   list.sort((a, b) => key(a) - key(b));
-  $('#b-list').innerHTML = list.length ? head + list.slice(0, 200).map(row).join('') + (list.length > 200 ? `<div class="dim">${list.length - 200} more, filter it down</div>` : '') : '<div class="empty">no trade ups match that</div>';
+  $('#b-list').innerHTML = list.length ? head + list.slice(0, 200).map(row).join('') + (list.length > 200 ? `<div class="dim">${list.length - 200} more, filter it down</div>` : '') : warming() || '<div class="empty">no trade ups match that</div>';
 }
 
 function find(id) { return [...(S.data?.guaranteed || []), ...(S.data?.pending || []), ...(S.data?.top || [])].find(t => t.id === id); }
@@ -286,7 +292,7 @@ function renderStatus() {
   if (!d) return;
   const n = d.guaranteed.length;
   const stale = Date.now() - d.at > 15 * 60000;
-  $('#status').innerHTML = `scanned <b>${ago(d.at)}</b>${stale ? ' <span class="rl">(stale)</span>' : ''} · <b>${n}</b> guaranteed · <b>${d.top.length}</b> others · <b>${(d.pending || []).length}</b> checking · steam prices ${d.sources.steam ?? 0}${d.rateLimited ? ' · <span class="rl">steam rate limited us</span>' : ''}`;
+  $('#status').innerHTML = `scanned <b>${ago(d.at)}</b>${stale ? ' <span class="rl">(stale)</span>' : ''} · <b>${n}</b> guaranteed · <b>${d.top.length}</b> others · <b>${(d.pending || []).length}</b> checking · steam prices ${d.sources.steam ?? 0}${d.sources.steamTotal ? ' / ' + d.sources.steamTotal : ''}${d.rateLimited ? ' · <span class="rl">steam rate limited us</span>' : ''}`;
   $('#tabs [data-tab=guaranteed]').textContent = `guaranteed (${n})`;
   if (stale) window.dispatchEvent(new CustomEvent('dc:stale'));
 }
@@ -386,7 +392,7 @@ async function forceScan() {
     await sleep(900);
     guy.log('scanning ~1M contracts');
     await sleep(900);
-    guy.log('results in like 3 min');
+    guy.log('results in like 8 min');
     S.waitingFor = S.data?.at || 0;
     await sleep(1800);
     guy.terminal(false);
@@ -401,7 +407,7 @@ async function forceScan() {
 }
 
 async function pollScan(n) {
-  if (n > 16) return;
+  if (n > 30) { guy?.say('github is slow today. it will show up on its own', 3000); return; }
   await sleep(30000);
   await load();
   if (S.data?.at && S.data.at !== S.waitingFor) { guy?.say('fresh scan is in', 2500); return; }
