@@ -142,6 +142,30 @@ void main() {
   gl_FragColor = vec4(c + sp, t.a);
 }`;
 
+const pick = a => a[Math.random() * a.length | 0];
+const LINES = {
+  poke: ['bro stop clicking me', 'i\'m working here', 'you got money for this?', 'ow', 'one more and i\'m sending it all to cases'],
+  fail: ['bruh', 'thats not it chief', 'nah that one\'s cooked', 'steam tax got us'],
+  phone: ['yeah my guy found a trade up... nah not guaranteed', 'hello? yeah im still waiting on prices', 'bro the float is 0.07 exactly. exactly.', 'ok bye. no YOU hang up', 'tell valve i said hi']
+};
+const CFG = {
+  idle: { clip: 'Idle_Loop', look: 1 },
+  loading: { clip: 'Fixing_Kneeling', look: 0.2, turn: -30 },
+  phone: { clip: 'Idle_TalkingPhone_Loop', look: 0.3 },
+  fold: { clip: 'Idle_FoldArms_Loop', look: 0.8 },
+  no: { clip: 'Idle_No_Loop', look: 0.3 },
+  push: { clip: 'Push_Loop', turn: -90, move: [0, 0.62] },
+  walkin: { clip: 'Walk_Loop', turn: -90, move: [-2.6, 0.93] },
+  sitdown: { clip: 'Sitting_Enter', once: true, next: 'sit' },
+  sit: { clip: 'Sitting_Idle_Loop', look: 0.6 },
+  standup: { clip: 'Sitting_Exit', once: true, next: 'idle' },
+  hit: { clip: 'Hit_Head', once: true, next: 'back', again: true, hold: 0.2 },
+  roll: { clip: 'Roll', once: true, next: 'idle', turn: -80 },
+  pickup: { clip: 'PickUp_Table', once: true, next: 'hold' },
+  dance: { clip: 'Dance_Loop', look: 0.2 },
+  yes: { clip: 'Yes', once: true, next: 'idle' }
+};
+
 export class Guy {
   constructor(host, opts = {}) {
     this.host = host;
@@ -172,6 +196,7 @@ export class Guy {
     host.addEventListener('pointermove', e => this.aim(e));
     window.addEventListener('pointermove', e => this.aim(e));
     this.canvas.addEventListener('click', () => this.poke());
+    for (const ev of ['pointermove', 'keydown', 'scroll', 'pointerdown']) window.addEventListener(ev, () => this.wake(), { passive: true });
     new ResizeObserver(() => this.resize()).observe(host);
   }
 
@@ -232,10 +257,37 @@ export class Guy {
     this.watch = this.rigid(box(0.04, 0.03, 0.035));
     this.watchOff = M4.mul(this.invRest('lowerArm.l'), M4.fromQT([0, 0, 0, 1], [0.76, 1.425, 0.035]));
 
+    this.phone = this.rigid(merge(box(0.055, 0.16, 0.035), box(0.01, 0.11, 0.01, 0.017, 0.13, -0.005), box(0.016, 0.016, 0.016, 0.017, 0.19, -0.005)));
+    this.phoneFace = this.rigid(quad(0.048, 0.15, 0.0181));
+    this.phoneTex = this.texFromCanvas(this.paint(64, 192, x => {
+      x.fillStyle = '#2b2b29'; x.fillRect(0, 0, 64, 192);
+      x.fillStyle = '#9fb46a'; x.fillRect(8, 12, 48, 34);
+      x.fillStyle = '#2f3a1c'; x.font = 'bold 11px monospace'; x.fillText('DE_C', 14, 33);
+      x.fillStyle = '#6d6d68';
+      for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) x.fillRect(9 + c * 17, 62 + r * 24, 13, 15);
+    }));
+    this.crate = this.rigid(box(0.62, 0.5, 0.5));
+    this.bigCrate = this.rigid(box(0.8, 1.15, 0.7));
+    this.crateTex = this.texFromCanvas(this.paint(128, 128, x => {
+      x.fillStyle = '#8a6a3c'; x.fillRect(0, 0, 128, 128);
+      x.fillStyle = '#6f5430'; for (let i = 0; i < 128; i += 21) x.fillRect(0, i, 128, 3);
+      x.strokeStyle = '#4e3a20'; x.lineWidth = 8; x.strokeRect(4, 4, 120, 120);
+      x.fillStyle = 'rgba(30,22,10,.8)'; x.font = 'bold 17px Impact, sans-serif'; x.textAlign = 'center'; x.fillText('CONTRACT', 64, 70);
+    }));
+    this.machine = this.rigid(merge(box(0.34, 0.24, 0.26, 0, 0.12, 0), box(0.02, 0.18, 0.02, 0.12, 0.33, -0.08)));
+    this.machineFace = this.rigid(quad(0.26, 0.15, 0.136));
+    this.machineCanvas = this.paint(96, 64, () => {});
+    this.machineTex = this.texFromCanvas(this.machineCanvas);
     this.resize();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) requestAnimationFrame(this.loop); });
+  }
+
+  paint(w, h, f) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    f(c.getContext('2d'));
+    return c;
   }
 
   invRest(name) {
@@ -324,27 +376,56 @@ export class Guy {
   }
 
   set(state, hold) {
-    if (state === this.state && state !== 'poke') return;
-    if (this.state === 'dubs' && state !== 'dubs') this.glassesOff = performance.now() / 1000;
+    if (state === this.state && !CFG[state]?.again) return;
     this.prev = this.state;
-    this.prevT = this.stateT;
     this.state = state;
     this.blend = 0;
     this.stateStart = performance.now() / 1000;
+    this.active = performance.now();
     if (state === 'dubs') this.burst();
-    if (state === 'fail') this.say(['bruh', 'thats not it chief', 'nah that one\'s cooked', 'steam tax got us'][Math.random() * 4 | 0], 2400);
+    if (state === 'fail') this.say(pick(LINES.fail), 2400);
+    if (state === 'phone') this.say(pick(LINES.phone), 3200);
     clearTimeout(this.holdTimer);
     if (hold) this.holdTimer = setTimeout(() => this.set('idle'), hold);
   }
 
+  busy() { return ['push', 'walkin', 'sitdown', 'standup', 'roll', 'pickup'].includes(this.state); }
+
   poke() {
-    const lines = ['bro stop clicking me', 'i\'m working here', 'you got money for this?', 'ow', 'one more and i\'m sending it all to cases'];
-    this.say(lines[(this.pokes = (this.pokes || 0) + 1) % lines.length], 1800);
-    const back = this.state === 'poke' ? this.prev : this.state;
-    this.set('poke');
-    this.prev = back;
-    clearTimeout(this.pokeTimer);
-    this.pokeTimer = setTimeout(() => this.set(back === 'poke' ? 'idle' : back), 1300);
+    if (this.busy()) return;
+    const now = performance.now();
+    this.pokeLog = (this.pokeLog || []).filter(t => now - t < 3500).concat(now);
+    if (this.state === 'sit') return this.set('standup');
+    if (this.pokeLog.length >= 5) { this.pokeLog = []; this.say('ight im out', 1500); return this.set('roll'); }
+    this.say(LINES.poke[(this.pokes = (this.pokes || 0) + 1) % LINES.poke.length], 1800);
+    this.back = CFG[this.state]?.once ? this.back : this.state;
+    this.set('hit');
+  }
+
+  push() { if (!this.busy()) this.set('push'); }
+
+  tick(now, st) {
+    const c = CFG[this.state];
+    if (c?.once && this.clips[c.clip] && st > this.clips[c.clip].d + (c.hold || 0)) {
+      const next = c.next === 'back' ? (this.back || 'idle') : c.next;
+      this.set(next || 'idle');
+    }
+    if (this.state === 'push' && st > 5.5) this.set('walkin');
+    if (this.state === 'walkin' && st > 2.8) this.set('idle');
+    const quiet = performance.now() - (this.active || 0);
+    if (this.state === 'idle' && !this.locked) {
+      if (quiet > 120000) this.set('sitdown');
+      else if (st > (this.nextFidget ??= 14 + Math.random() * 14)) {
+        this.nextFidget = 14 + Math.random() * 16;
+        this.set(pick(['fold', 'phone', 'watch', 'no']), 0);
+      }
+    }
+    if (['fold', 'phone', 'watch', 'no'].includes(this.state) && st > (this.state === 'phone' ? 11 : 6)) this.set('idle');
+  }
+
+  wake() {
+    this.active = performance.now();
+    if (this.state === 'sit') this.set('standup');
   }
 
   say(text, ms = 2200) {
@@ -397,6 +478,14 @@ export class Guy {
       const c = this.clip(state.slice(5), t, !this.once);
       return { p: this.look2(c.p, 0.5), root: c.root, turn: -18 };
     }
+    const cf = CFG[state];
+    if (cf && this.clips[cf.clip]) {
+      const c = this.clip(cf.clip, t, !cf.once);
+      const root = c.root.slice();
+      if (cf.move) root[2] += cf.move[0] + cf.move[1] * t;
+      return { p: this.look2(c.p, cf.look ?? 0), root, turn: cf.turn ?? -18 };
+    }
+    if (state === 'watch') state = 'loading_proc';
     const lk = this.look;
     const breathe = wave(t, 0.28) * 1.6;
     const sway = wave(t, 0.11) * 2;
@@ -412,7 +501,7 @@ export class Guy {
       const blink = (t % 7) < 0.9 ? Math.sin((t % 7) / 0.9 * Math.PI) : 0;
       p.head = [p.head[0] - blink * 6, p.head[1] + blink * 10, p.head[2] + blink * 6];
       root = [sway * 0.004, 0, 0];
-    } else if (state === 'loading') {
+    } else if (state === 'loading_proc') {
       const cyc = t % 6;
       const peek = cyc < 3.8 ? 1 : 0;
       const k = cyc < 0.5 ? ease(cyc / 0.5) : cyc < 3.8 ? 1 : cyc < 4.3 ? 1 - ease((cyc - 3.8) / 0.5) : 0;
@@ -484,21 +573,6 @@ export class Guy {
       p.head = [lerp(0, 22, f), wave(s, 0.9) * 14 * f, 0];
       p['upperArm.l'] = [4, -8, -80];
       root = [0, -f * 0.01, 0];
-    } else if (state === 'poke') {
-      const s = t;
-      const j = Math.sin(Math.min(1, s / 0.45) * Math.PI);
-      const fl = s < 1.1 ? 1 : 0;
-      p = mirror(arms);
-      p['upperArm.l'] = [0, 0, -72 + j * 110 + wave(s, 4) * 20 * fl];
-      p['upperArm.r'] = [0, 0, 72 - j * 110 - wave(s, 4, 1) * 20 * fl];
-      p['lowerArm.l'] = [0, -30 * j, 0];
-      p['lowerArm.r'] = [0, 30 * j, 0];
-      p.head = [-10 * j, wave(s, 2.5) * 20, 0];
-      p.chest = [-6 * j, 0, wave(s, 3) * 5];
-      p['upperLeg.l'] = [-j * 30, 0, 6 * j];
-      p['lowerLeg.l'] = [j * 50, 0, 0];
-      root = [0, j * 0.12, 0];
-      turn = -18 + wave(s, 1.2) * 25 * fl;
     }
     return { p, root, turn };
   }
@@ -514,7 +588,7 @@ export class Guy {
     this.look[1] += (this.lookT[1] - this.look[1]) * Math.min(1, dt * 6);
     this.blend = Math.min(1, this.blend + dt / 0.3);
     const st = Math.max(0, now - (this.stateStart || this.t0));
-    const timeFor = s => (s === 'idle' || s === 'loading' || s === 'hold') ? now - this.t0 : st;
+    const timeFor = s => (s === 'watch' || s === 'hold') ? now - this.t0 : st;
     let cur = this.pose(this.state, timeFor(this.state));
     const toQ = o => { const p = {}; for (const n in o.p) p[n] = o.p[n].length === 4 ? o.p[n] : Q.euler(o.p[n]); return { ...o, p }; };
     cur = toQ(cur);
@@ -530,6 +604,7 @@ export class Guy {
     else if (this.glasses > 0) this.glasses = Math.max(0, this.glasses - dt * 2.5);
     this.zoom = Math.max(0, Math.min(1, (this.zoom || 0) + (this.state === 'hold' ? dt : -dt) * 2.2));
     this.wide = Math.max(0, Math.min(1, (this.wide || 0) + (this.state === 'dubs' ? dt : -dt) * 2.5));
+    this.tick(now, st);
     this.draw(cur, now, st);
     this.drawFx(dt);
   }
@@ -658,8 +733,53 @@ export class Guy {
         gl.uniform1f(L.uHandOnly, 0);
       }
     }
-    const loadK = this.state === 'loading' ? 1 : this.prev === 'loading' ? 1 - this.blend : 0;
+    const handMat = (n, off) => M4.mul(bw('hand.' + n), off);
+    if (!this.phoneOff) {
+      const R = (cols, t) => new Float32Array([...cols[0], 0, ...cols[1], 0, ...cols[2], 0, ...t, 1]);
+      this.phoneOff = M4.mul(this.invRest('hand.r'), R([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], [-0.875, 1.37, 0.03]));
+    }
+    const phoneK = this.state === 'phone' ? Math.min(1, st / 0.4) : this.prev === 'phone' ? 1 - this.blend : 0;
+    if (phoneK > 0.01) {
+      const m = M4.mul(handMat('r', this.phoneOff), M4.fromQT([0, 0, 0, 1], [0, 0, 0], phoneK));
+      this.drawRigid(this.phone, m, this.white, [0.2, 0.2, 0.19, 1], 0, 0.6);
+      this.drawRigid(this.phoneFace, m, this.phoneTex, [1, 1, 1, 1], 0.4);
+    }
+    if (['sitdown', 'sit', 'standup'].includes(this.state)) this.drawRigid(this.crate, M4.fromQT([0, 0, 0, 1], [0, 0.25, -0.34]), this.crateTex);
+    if (this.state === 'push') this.drawRigid(this.bigCrate, M4.fromQT([0, 0, 0, 1], [0, 0.575, cur.root[2] + 0.98]), this.crateTex);
+    const loadingK = this.state === 'loading' ? Math.min(1, st / 0.5) : this.prev === 'loading' ? 1 - this.blend : 0;
+    if (loadingK > 0.01) {
+      if (!this.mt || now - this.mt > 0.25) { this.mt = now; this.paintMachine(now); }
+      const m = M4.fromQT(Q.euler([0, -20, 0]), [0.05, 0, 0.62], loadingK);
+      this.drawRigid(this.machine, m, this.white, [0.4, 0.42, 0.36, 1], 0, 0.3);
+      this.drawRigid(this.machineFace, M4.mul(m, M4.fromQT([0, 0, 0, 1], [0, 0.13, 0])), this.machineTex, [1, 1, 1, 1], 0.8);
+      if (Math.random() < 0.04) this.spark(VP, model, [0.05, 0.3, 0.6]);
+    }
+    const loadK = this.state === 'watch' ? 1 : this.prev === 'watch' ? 1 - this.blend : 0;
     if (loadK > 0.01) this.drawRigid(this.watch, M4.mul(bw('lowerArm.l'), this.watchOff), this.white, [0.75, 0.68, 0.3, 1], 0, 1);
+  }
+
+  paintMachine(now) {
+    const x = this.machineCanvas.getContext('2d');
+    x.fillStyle = '#0d1a0d'; x.fillRect(0, 0, 96, 64);
+    x.fillStyle = '#5fdc5f'; x.font = 'bold 12px monospace';
+    x.fillText(['SCAN.', 'SCAN..', 'SCAN...'][Math.floor(now * 2) % 3], 6, 18);
+    const p = (now * 0.35) % 1;
+    x.strokeStyle = '#5fdc5f'; x.strokeRect(6, 30, 84, 12); x.fillRect(8, 32, 80 * p, 8);
+    x.fillStyle = Math.floor(now * 3) % 2 ? '#e8c547' : '#5a4a10'; x.fillRect(80, 6, 8, 8);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.machineTex);
+    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.machineCanvas);
+  }
+
+  project(VP, model, p) {
+    const w = M4.mul(VP, model), v = [p[0], p[1], p[2], 1];
+    const o = [0, 1, 2, 3].map(r => w[r] * v[0] + w[4 + r] * v[1] + w[8 + r] * v[2] + w[12 + r] * v[3]);
+    return [(o[0] / o[3] * 0.5 + 0.5) * this.fx.width, (0.5 - o[1] / o[3] * 0.5) * this.fx.height];
+  }
+
+  spark(VP, model, p) {
+    const [x, y] = this.project(VP, model, p);
+    for (let i = 0; i < 8; i++) this.confetti.push({ x, y, vx: (Math.random() - 0.5) * 160, vy: -Math.random() * 160, r: 0, c: i % 2 ? '#ffd35a' : '#fff4c0', life: 0.35 + Math.random() * 0.3 });
   }
 
   drawShadow(VP, cur) {
