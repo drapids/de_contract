@@ -175,7 +175,9 @@ const CFG = {
   down: { clip: 'Hit_Knockback', look: 0, freeze: true },
   getup: { clip: 'LayToIdle', once: true, next: 'idle' },
   shock: { clip: 'Idle_No_Loop', look: 0.2 },
-  scared: { clip: 'Hit_Head', once: true, next: 'shock' }
+  scared: { clip: 'Hit_Head', once: true, next: 'shock' },
+  defuse: { clip: 'Fixing_Kneeling', look: 0, turn: 0 },
+  rise: { clip: 'Sitting_Exit', once: true, next: 'yes', turn: 0 }
 };
 
 export class Guy {
@@ -475,7 +477,7 @@ export class Guy {
 
   terminal(on, title = '') {
     if (on) {
-      this.cine = true; this.termLines = [title || 'de_contract terminal']; this.termDirty = true;
+      this.cine = true; this.cineMode = 'term'; this.cineCam = null; this.termLines = [title || 'de_contract terminal']; this.termDirty = true;
       this.preCine = this.state === 'type' ? 'idle' : this.state;
       this.sceneTurn = 0;
       this.set('type');
@@ -527,6 +529,55 @@ export class Guy {
     this.drawRigid(this.crt, cm, this.white, [0.62, 0.6, 0.52, 1]);
     if (this.termDirty || !this.tt || now - this.tt > 0.5) { this.tt = now; this.termDirty = false; this.paintTerm(now); }
     this.drawRigid(this.crtFace, M4.mul(cm, M4.fromQT([0, 0, 0, 1], [0, 0.21, 0])), this.termTex, [1, 1, 1, 1], 1);
+  }
+
+  defuse(on) {
+    if (on) {
+      this.cine = true; this.cineMode = 'defuse';
+      this.cineCam = { eye: [1.35, 0.42, 1.75], tgt: [0.05, 0.55, 0.35], shift: 0.32 };
+      this.locked = true; this.sceneTurn = 0; this.pos = [0, 0, 0];
+      this.c4 = { text: '', on: true, t0: this.now || 0 };
+      this.set('defuse');
+      document.body.classList.add('cinema');
+    } else {
+      this.c4 = null;
+      this.cine = false; this.cineMode = null; this.cineCam = null;
+      this.locked = false; this.sceneTurn = null;
+      document.body.classList.remove('cinema');
+      this.set('idle');
+    }
+  }
+
+  flinch() { this.flinchT = this.now; }
+
+  drawC4(now) {
+    if (!this.c4mesh) {
+      this.c4mesh = this.rigid(merge(box(0.08, 0.05, 0.22, -0.1, 0.025, -0.02), box(0.08, 0.05, 0.22, 0, 0.025, -0.02), box(0.08, 0.05, 0.22, 0.1, 0.025, -0.02), box(0.32, 0.012, 0.02, 0, 0.03, 0.04), box(0.32, 0.012, 0.02, 0, 0.03, -0.08)));
+      this.c4panel = this.rigid(box(0.22, 0.13, 0.025));
+      this.c4face = this.rigid(quad(0.2, 0.11, 0));
+      this.c4canvas = this.paint(128, 72, () => {});
+      this.c4tex = this.texFromCanvas(this.c4canvas);
+    }
+    const C = this.c4, el = now - C.t0;
+    const period = Math.max(0.22, 1.1 - el / 90);
+    const led = (el % period) < 0.08;
+    if (led && !this.ledOn) this.emit('beep');
+    this.ledOn = led;
+    const x = this.c4canvas.getContext('2d');
+    x.fillStyle = '#26301f'; x.fillRect(0, 0, 128, 72);
+    x.fillStyle = C.bad ? '#5a1d16' : '#7c9a52'; x.fillRect(6, 6, 116, 26);
+    x.fillStyle = '#10180a'; x.font = 'bold 16px monospace';
+    x.fillText((C.text ? '*'.repeat(Math.min(10, C.text.length)) : '_______').padEnd(10, ' '), 12, 25);
+    x.fillStyle = '#555'; for (let r = 0; r < 2; r++) for (let c = 0; c < 6; c++) x.fillRect(8 + c * 19, 40 + r * 15, 14, 11);
+    x.fillStyle = led ? '#ff3b2b' : '#4a120d'; x.beginPath(); x.arc(116, 46, 6, 0, 7); x.fill();
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.c4tex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.c4canvas);
+    const m = M4.mul(M4.fromQT([0, 0, 0, 1], [0.05, 0.0, 0.62], 1.5), M4.rotY(0.5));
+    this.drawRigid(this.c4mesh, m, this.white, [0.72, 0.62, 0.42, 1]);
+    const pm = M4.mul(m, M4.fromQT(Q.euler([-55, 0, 0]), [0, 0.085, 0.03]));
+    this.drawRigid(this.c4panel, pm, this.white, [0.2, 0.21, 0.18, 1], 0, 0.4);
+    this.drawRigid(this.c4face, M4.mul(pm, M4.fromQT([0, 0, 0, 1], [0, 0, 0.0135])), this.c4tex, [1, 1, 1, 1], 0.9);
   }
 
   verdict() {
@@ -763,7 +814,7 @@ export class Guy {
       const c = this.cineCam || { eye: [1.55, 0.5, 0.8], tgt: [-0.05, 1.3, 0.3] };
       eye = eye.map((v, i) => lerp(v, c.eye[i], k));
       tgt = tgt.map((v, i) => lerp(v, c.tgt[i], k));
-      shift = lerp(anchor, 0, k);
+      shift = lerp(anchor, c.shift || 0, k);
     }
     const P = M4.persp(lerp(0.5, 0.95, k), asp, 0.05, 30);
     P[8] = -shift;
@@ -818,6 +869,24 @@ export class Guy {
       const c = this.clip(cf.clip, cf.freeze ? 99 : t, !cf.once && !cf.freeze);
       const root = c.root.slice();
       if (cf.move) root[2] += cf.move[0] + cf.move[1] * t;
+      if (state === 'defuse') {
+        const cyc = t % 13;
+        const sc = cyc > 3 && cyc < 5 ? Math.sin((cyc - 3) / 2 * Math.PI) : 0;
+        const look = cyc > 7 && cyc < 10 ? Math.sin((cyc - 7) / 3 * Math.PI) : 0;
+        const wipe = cyc > 10.5 && cyc < 12.3 ? Math.sin((cyc - 10.5) / 1.8 * Math.PI) : 0;
+        if (sc > 0.05) {
+          c.p['upperArm.r'] = Q.nlerp(c.p['upperArm.r'], Q.euler([-60, 50, 30]), sc);
+          c.p['lowerArm.r'] = Q.nlerp(c.p['lowerArm.r'], Q.euler([0, 140 + wave(t, 3) * 12, -10]), sc);
+          c.p.head = Q.mul(Q.euler([-8 * sc, 12 * sc, 6 * sc]), c.p.head || [0, 0, 0, 1]);
+        }
+        if (wipe > 0.05) {
+          c.p['upperArm.l'] = Q.nlerp(c.p['upperArm.l'], Q.euler([-60, -50, -30]), wipe);
+          c.p['lowerArm.l'] = Q.nlerp(c.p['lowerArm.l'], Q.euler([0, -130, 10 + wave(t, 1.5) * 15]), wipe);
+        }
+        if (look > 0.05) c.p.head = Q.mul(Q.euler([-10 * look, wave(t, 0.33) * 50 * look, 0]), c.p.head || [0, 0, 0, 1]);
+        const fl = this.flinchT ? Math.max(0, 1 - (this.now - this.flinchT) / 0.6) : 0;
+        if (fl > 0) { c.p.head = Q.mul(Q.euler([-30 * fl, 0, 0]), c.p.head || [0, 0, 0, 1]); c.p.chest = Q.mul(Q.euler([-14 * fl, 0, 0]), c.p.chest || [0, 0, 0, 1]); root[2] -= 0.05 * fl; }
+      }
       return { p: this.look2(c.p, cf.look ?? 0), root, turn: cf.turn ?? -18, plant: cf.plant };
     }
     if (state === 'watch') state = 'loading_proc';
@@ -1137,7 +1206,8 @@ export class Guy {
       this.drawRigid(this.gun, gm, this.gunTex, [1, 1, 1, 1], 0.15, 0.8);
       this.muzzle = M4.mul(model, M4.mul(gm, M4.fromQT([0, 0, 0, 1], [2.05, 1.38, 0])));
     }
-    if (this.cineK > 0.02) this.drawTerminal(now, bw);
+    if (this.cineK > 0.02 && this.cineMode !== 'defuse') this.drawTerminal(now, bw);
+    if (this.c4) this.drawC4(now);
     if (this.spook.on) this.drawSpook(VP, now);
     this.drawShots(VP, now);
     if (holdK <= 0.01 && this.cardShown) { this.card2d.style.opacity = 0; this.cardShown = false; }

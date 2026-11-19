@@ -1,6 +1,7 @@
 import { Db, TIERS, TIER_COLORS, WEARS, wearsFor, wearSpan, hashName, outcomes, parseHash, usd, netAfterFee } from './tradeup.js';
 import { Guy } from './guy.js';
 import { setup as soundSetup, sfx, setMusic, setVolume } from './sound.js';
+import { getLock, unlock, fetchData } from './lock.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -393,7 +394,7 @@ async function load(manual) {
   if (manual || !S.data) guy?.set('loading');
   try {
     const bust = '?t=' + Math.floor(Date.now() / 60000);
-    const [d, sk, pr, ho] = await Promise.all(['tradeups', 'skins', 'prices', 'hollow'].map(n => fetch(`data/${n}.json${bust}`).then(r => r.ok ? r.json() : null).catch(() => null)));
+    const [d, sk, pr, ho] = await Promise.all(['tradeups', 'skins', 'prices', 'hollow'].map(n => fetchData(`data/${n}.json`, 'json', bust).catch(() => null)));
     if (!d) throw new Error('no scan data yet');
     S.data = d; S.prices = pr?.prices || {}; S.hollow = ho?.hollow || [];
     if (sk) S.db = new Db(sk);
@@ -496,9 +497,14 @@ async function applySkin() {
     if (guy.spookRig?.ghost !== false) await guy.setGhost(sk === 'phoenix' ? 'sas' : 'phoenix');
   } catch (e) { await guy.setSkin('orange'); }
 }
-try { guy = new Guy($('#guy'), { base: 'assets/', loader: window.dcLoader, onEvent }); window.guy = guy; } catch (e) { guy = null; }
+const loader = (url, type) => fetchData(url, type);
+try { guy = new Guy($('#guy'), { base: 'assets/', loader, onEvent }); window.guy = guy; } catch (e) { guy = null; }
 window.dc = { S, get guy() { return guy; } };
 await guy?.ready;
+if (await getLock()) {
+  try { await guy?.setSkin('sas'); } catch (e) {}
+  S.key = await unlock(guy, sfx);
+}
 await applySkin();
 load();
 setInterval(() => { if (!document.hidden) load(); }, 5 * 60000);

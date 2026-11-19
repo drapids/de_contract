@@ -232,3 +232,26 @@ body.cinema .guy-bubble { display: none; }
 .cine-log div { animation: typein .25s steps(12); white-space: nowrap; overflow: hidden; }
 @keyframes typein { from { width: 0; } to { width: 100%; } }
 #snd.off { color: #6f7867; text-decoration: line-through; }
+
+body.defusing .bar, body.defusing .layout, body.defusing .foot { filter: blur(3px) brightness(.4); pointer-events: none; }
+.defuse { position: fixed; inset: 0; z-index: 27; pointer-events: none; }
+.defuse .key {
+  pointer-events: auto; position: absolute; left: max(4vw, 16px); top: 50%; transform: translateY(-50%); width: min(400px, 92vw);
+  background: #2a2f22; border: 2px solid; border-color: #6a7360 #1a1d15 #1a1d15 #6a7360; padding: 14px; box-shadow: 0 10px 40px #000;
+}
+.key-t { font: bold 16px Verdana, sans-serif; color: #e05a3c; text-transform: uppercase; letter-spacing: 2px; }
+.key-s { color: var(--dim); margin: 2px 0 10px; }
+.key-in { width: 100%; background: #7c9a52; color: #10180a; border: 3px inset #3d4a2a; font: bold 22px monospace; padding: 6px 10px; letter-spacing: 6px; outline: none; }
+.key-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.key-tries { color: var(--dim); }
+.defuse.checking .key-go { opacity: .5; }
+.defuse.shake .key { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translate(-8px, -50%); } 40%, 80% { transform: translate(8px, -50%); } }
+@media (max-width: 700px) { .defuse .key { top: auto; bottom: 4vh; left: 50%; transform: translateX(-50%); } }
+.key-big { position: absolute; left: 0; right: 0; top: 18vh; text-align: center; font: bold clamp(28px, 6vw, 64px) Verdana, sans-serif; color: #e8e2c8; text-shadow: 3px 3px 0 #000; text-transform: uppercase; letter-spacing: 3px; }
+.defuse.won .key-big { color: #8fd16f; }
+.defuse.won .key { opacity: 0; transition: opacity .4s; }
+.defuse.boom { background: #fff; animation: boom 3s forwards; }
+.defuse.boom .key-big { color: #d9694f; }
+@keyframes boom { 0% { background: #fff; } 15% { background: #f7c46b; } 100% { background: rgba(0,0,0,.85); } }
+.defuse.gone { opacity: 0; transition: opacity .5s; }
