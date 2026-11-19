@@ -205,8 +205,8 @@ export class Guy {
     this.signCanvas.width = 256; this.signCanvas.height = 128;
     this.setDubs('');
 
-    this.card = this.rigid(box(0.24, 0.56, 0.02));
-    this.cardFace = this.rigid(quad(0.22, 0.54, 0));
+    this.card = this.rigid(box(0.5, 0.26, 0.02));
+    this.cardFace = this.rigid(quad(0.48, 0.24, 0));
     this.watch = this.rigid(box(0.04, 0.03, 0.035));
     this.watchOff = M4.mul(this.invRest('lowerArm.l'), M4.fromQT([0, 0, 0, 1], [0.76, 1.425, 0.035]));
 
@@ -253,14 +253,13 @@ export class Guy {
       if (cors) im.crossOrigin = 'anonymous';
       im.onload = () => {
         const c = document.createElement('canvas');
-        c.width = 128; c.height = 256;
+        c.width = 256; c.height = 128;
         const x = c.getContext('2d');
         if (url.endsWith('guy.png')) { c.width = im.width; c.height = im.height; x.drawImage(im, 0, 0); }
         else {
-          x.fillStyle = '#23261d'; x.fillRect(0, 0, 128, 256);
-          x.translate(64, 128); x.rotate(-Math.PI / 2);
-          const k = Math.min(250 / im.width, 120 / im.height);
-          x.drawImage(im, -im.width * k / 2, -im.height * k / 2, im.width * k, im.height * k);
+          x.fillStyle = '#23261d'; x.fillRect(0, 0, 256, 128);
+          const k = Math.min(240 / im.width, 116 / im.height);
+          x.drawImage(im, 128 - im.width * k / 2, 64 - im.height * k / 2, im.width * k, im.height * k);
         }
         res(this.texFromCanvas(c));
       };
@@ -290,12 +289,11 @@ export class Guy {
     let tex = null;
     if (url) { try { tex = await this.texFromUrl(url); } catch (e) { tex = null; } }
     if (!tex) {
-      const c = document.createElement('canvas'); c.width = 128; c.height = 256;
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128;
       const x = c.getContext('2d');
-      x.fillStyle = '#2b2f24'; x.fillRect(0, 0, 128, 256);
-      x.translate(64, 128); x.rotate(-Math.PI / 2);
-      x.fillStyle = '#c7b98b'; x.font = 'bold 18px Tahoma, sans-serif'; x.textAlign = 'center';
-      x.fillText((name || '???').slice(0, 24), 0, 6);
+      x.fillStyle = '#2b2f24'; x.fillRect(0, 0, 256, 128);
+      x.fillStyle = '#c7b98b'; x.font = 'bold 20px Tahoma, sans-serif'; x.textAlign = 'center';
+      x.fillText((name || '???').slice(0, 24), 128, 70);
       tex = this.texFromCanvas(c);
     }
     if (this.heldTex) this.gl.deleteTexture(this.heldTex);
@@ -385,18 +383,25 @@ export class Guy {
       root = [0, peek * wave(t, 2.2) * 0.003, 0];
       turn = -14;
     } else if (state === 'hold') {
-      const H = [[0, -20, -82], [0, -35, 10], [0, 0, 10]];
-      p = mirror(arms);
-      p['upperArm.l'] = [H[0][0] + breathe * 0.3, H[0][1], H[0][2]];
-      p['lowerArm.l'] = H[1];
-      p['hand.l'] = H[2];
-      p['upperArm.r'] = [6, 12, 70];
-      p['lowerArm.r'] = [0, 18, 0];
-      p.chest = [1 + breathe, 10, 2];
-      p.hip = [0, 0, -3];
-      const glance = (t % 6) < 1.6 ? Math.sin((t % 6) / 1.6 * Math.PI) : 0;
-      p.head = [lk[1] * 12 + glance * 16, lk[0] * 28 + glance * 30, glance * 8];
-      turn = -26;
+      const H = [[-12, -26, -80], [0, -73, 26], [0, 0, 0]];
+      const cy = t % 14;
+      const seg = (a, b) => cy < a || cy > b ? 0 : Math.sin((cy - a) / (b - a) * Math.PI);
+      const lookCard = seg(0, 3.2), around = seg(3, 6.6), bop = seg(6.4, 10.6), sigh = seg(10.4, 14);
+      const beat = wave(t, 1.9);
+      p = mirror({ ...arms, 'upperArm.l': [H[0][0] - sigh * 4, H[0][1], H[0][2]], 'lowerArm.l': H[1], 'hand.l': H[2] });
+      p.chest = [2 + breathe + bop * Math.abs(beat) * 2 - sigh * 5, wave(t, 0.13) * 3, 0];
+      p.head = [
+        lk[1] * 8 + lookCard * 26 + around * wave(cy, 0.45) * 14 - sigh * 22 + bop * beat * 9,
+        lk[0] * 18 + around * wave(cy, 0.3) * 50,
+        bop * wave(t, 0.95) * 6 + around * 4
+      ];
+      const tap = bop * Math.max(0, beat);
+      p['upperLeg.r'] = [-tap * 8, 0, -1];
+      p['lowerLeg.r'] = [tap * 5, 0, 0];
+      p['foot.r'] = [-tap * 20, 0, 0];
+      p.hip = [0, 0, bop * wave(t, 0.95) * 2];
+      root = [0, bop * Math.abs(beat) * 0.006 - sigh * 0.008, 0];
+      turn = -14;
     } else if (state === 'dubs') {
       const s = t;
       const up = back(s / 0.55);
@@ -567,22 +572,23 @@ export class Guy {
     }
     const holdK = this.state === 'hold' ? Math.min(1, st / 0.25) : this.prev === 'hold' ? 1 - this.blend : 0;
     if (holdK > 0.01 && this.heldTex) {
-      const hp = M4.pos(bw('hand.l')), ep = M4.pos(bw('lowerArm.l'));
-      let fa = [hp[0] - ep[0], hp[1] - ep[1], hp[2] - ep[2]];
-      const fl = Math.hypot(...fa); fa = fa.map(v => v / fl);
-      const palm = [hp[0] + fa[0] * 0.06, hp[1] + fa[1] * 0.06 - 0.02, hp[2] + fa[2] * 0.06];
+      const palm = n => {
+        const hp = M4.pos(bw('hand.' + n)), ep = M4.pos(bw('lowerArm.' + n));
+        const l = Math.hypot(hp[0] - ep[0], hp[1] - ep[1], hp[2] - ep[2]);
+        return [0, 1, 2].map(i => hp[i] + (hp[i] - ep[i]) / l * 0.05);
+      };
+      const L = palm('l'), R = palm('r');
+      let rt = [L[0] - R[0], L[1] - R[1], L[2] - R[2]];
+      const span = Math.hypot(...rt); rt = rt.map(v => v / span);
       const tr = -cur.turn * Math.PI / 180;
-      const cam = [Math.sin(tr) * 0.6, 0, Math.cos(tr)];
-      let up = [-fa[0] * 0.25, 1, -fa[2] * 0.25];
-      let ul = Math.hypot(...up); up = up.map(v => v / ul);
-      const d = cam[0] * up[0] + cam[1] * up[1] + cam[2] * up[2];
-      let fw = [cam[0] - up[0] * d, cam[1] - up[1] * d, cam[2] - up[2] * d];
-      const fwl = Math.hypot(...fw); fw = fw.map(v => v / fwl);
-      const rt = [up[1] * fw[2] - up[2] * fw[1], up[2] * fw[0] - up[0] * fw[2], up[0] * fw[1] - up[1] * fw[0]];
-      const hh = 0.27, bob = wave(now, 0.6) * 0.004;
-      const c = [palm[0] + up[0] * (hh - 0.075) - fw[0] * 0.035, palm[1] + up[1] * (hh - 0.075) + bob, palm[2] + up[2] * (hh - 0.075) - fw[2] * 0.035];
-      const k = holdK;
-      const m = new Float32Array([rt[0] * k, rt[1] * k, rt[2] * k, 0, up[0] * k, up[1] * k, up[2] * k, 0, fw[0] * k, fw[1] * k, fw[2] * k, 0, c[0], c[1], c[2], 1]);
+      let fw = [Math.sin(tr) * 0.5, 0.15, Math.cos(tr)];
+      const d = fw[0] * rt[0] + fw[1] * rt[1] + fw[2] * rt[2];
+      fw = fw.map((v, i) => v - rt[i] * d);
+      const fl = Math.hypot(...fw); fw = fw.map(v => v / fl);
+      const up = [fw[1] * rt[2] - fw[2] * rt[1], fw[2] * rt[0] - fw[0] * rt[2], fw[0] * rt[1] - fw[1] * rt[0]];
+      const c = [0, 1, 2].map(i => (L[i] + R[i]) / 2 + up[i] * 0.01 - fw[i] * 0.02);
+      const sx = (span + 0.05) / 0.5 * holdK, k = holdK;
+      const m = new Float32Array([rt[0] * sx, rt[1] * sx, rt[2] * sx, 0, up[0] * k, up[1] * k, up[2] * k, 0, fw[0] * k, fw[1] * k, fw[2] * k, 0, c[0], c[1], c[2], 1]);
       this.drawRigid(this.card, m, this.white, [0.16, 0.17, 0.13, 1]);
       this.drawRigid(this.cardFace, M4.mul(m, M4.fromQT([0, 0, 0, 1], [0, 0, 0.0115])), this.heldTex, [1, 1, 1, 1], 0.7);
     }
