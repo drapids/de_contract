@@ -1,11 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { Db, wearsFor, wearSpan, hashName, normFloat, outFloat, wearIndex, netAfterFee, contractSize, TIERS, WEARS } from '../js/tradeup.js';
-import { loadSkins, skinportPrices, steamPages, discord, previous } from './sources.mjs';
+import { loadSkins, steamPages, steamOverview, discord, previous } from './sources.mjs';
 
 const OUT = process.env.OUT || 'dist/data';
 const SITE = process.env.SITE_URL || '';
 const HOOK = process.env.DISCORD_WEBHOOK || '';
-const STEAM_PAGES = +(process.env.STEAM_PAGES || 30);
+const STEAM_PAGES = +(process.env.STEAM_PAGES || 20);
+const VERIFY_MAX = +(process.env.VERIFY_MAX || 40);
+const VERIFY_TTL = 6 * 3600e3;
+const MIN_SELL_LISTINGS = 3;
 const TOP = 400;
 
 const t0 = Date.now();
@@ -18,10 +21,7 @@ const meta = await loadSkins();
 const db = new Db(meta);
 log('skins', meta.skins.length);
 
-let skinport = {}, sources = {};
-try { skinport = await skinportPrices(); sources.skinport = Object.keys(skinport).length; }
-catch (e) { sources.skinport = 'error: ' + e.message; }
-log('skinport', sources.skinport);
+const sources = {};
 
 const steamCache = prevState?.steam || {};
 const steamAge = prevState?.steamAge || {};
@@ -32,20 +32,35 @@ for (const k of Object.keys(steamAge)) if (now - steamAge[k] > 3 * 3600e3) { del
 sources.steam = Object.keys(steamCache).length;
 sources.steamFresh = Object.keys(sp.prices).length;
 const rateLimited = sp.rate;
+sources.market = 'steam';
 log('steam', sources.steamFresh, 'fresh,', sources.steam, 'cached', rateLimited ? '(rate limited)' : '');
 
+const verified = prevState?.verified || {};
+for (const k of Object.keys(verified)) if (now - verified[k].at > VERIFY_TTL) delete verified[k];
+
+function quote(h) {
+  const c = steamCache[h], v = verified[h];
+  if (!c && !v) return null;
+  const ask = v?.lo || c?.[0] || 0;
+  const q = c?.[1] ?? 0;
+  if (!ask) return null;
+  let sellBase = ask;
+  if (v?.med) sellBase = Math.min(ask, v.med);
+  const liquid = v ? v.vol >= 1 || q >= MIN_SELL_LISTINGS : q >= MIN_SELL_LISTINGS;
+  const sane = !(v?.med && ask > v.med * 2.5);
+  return {
+    buy: q > 0 ? { cents: ask, market: 'steam', q } : null,
+    sell: liquid ? { net: netAfterFee('steam', Math.max(1, (sane ? sellBase : v.med) - 1)), market: 'steam', ask } : null,
+    checked: !!v
+  };
+}
 const price = new Map();
-const add = (h, market, c, q) => {
-  if (!c) return;
-  const cur = price.get(h) || { buy: null, sell: null };
-  if (q > 0 && (!cur.buy || c < cur.buy.cents)) cur.buy = { cents: c, market, q };
-  const net = netAfterFee(market, Math.max(1, c - 1));
-  if (!cur.sell || net > cur.sell.net) cur.sell = { net, market, ask: c };
-  price.set(h, cur);
+const P = {
+  get: h => { if (!price.has(h)) price.set(h, quote(h)); return price.get(h); },
+  buy: h => P.get(h)?.buy,
+  sell: h => P.get(h)?.sell,
+  checked: h => !!P.get(h)?.checked
 };
-for (const [h, v] of Object.entries(skinport)) add(h, 'skinport', v.c, v.q);
-for (const [h, v] of Object.entries(steamCache)) add(h, 'steam', v[0], v[1]);
-const P = { buy: h => price.get(h)?.buy, sell: h => price.get(h)?.sell };
 
 function candidates(tier, st) {
   const byCol = new Map();
@@ -77,15 +92,14 @@ function score(parts, n, st, tier) {
     e.p += k / n / c.pool.length;
     probs.set(o.n, e);
   }
-  let ev = 0, win = 0, worst = Infinity, best = 0;
+  let ev = 0, win = 0, worst = Infinity, best = 0, unknown = 0;
   const outs = [];
   for (const { skin, p } of probs.values()) {
     const f = skin.vanilla ? 0 : outFloat(nHi, skin);
     const fLo = skin.vanilla ? 0 : outFloat(nLo, skin);
     const wi = wearIndex(f);
     const h = hashName(skin, wi, st);
-    const s = P.sell(h);
-    if (!s) return null;
+    const s = P.sell(h) || (unknown += p, { net: 0, market: '?' });
     ev += p * s.net;
     if (s.net > cost) win += p;
     worst = Math.min(worst, s.net);
@@ -99,11 +113,24 @@ function score(parts, n, st, tier) {
     st, tier, n,
     in: parts.map(([c, k]) => [c.hash, k, c.cents, c.market, c.q, c.skin.img, c.skin.min, c.skin.max, c.wi]),
     cost, ev: Math.round(ev), roi: +((ev - cost) / cost).toFixed(4), win: +win.toFixed(4), worst, best,
-    guaranteed: worst > cost,
+    guaranteed: worst > cost && !unknown && !parts.some(([c, k]) => c.q < k),
     thin: parts.some(([c, k]) => c.q < k),
-    outs
+    unknown: +unknown.toFixed(4),
+    outs,
+    _parts: parts
   };
 }
+
+function refresh(r) {
+  const parts = r._parts.map(([c, k]) => {
+    const b = P.buy(c.hash);
+    return [{ ...c, cents: b?.cents ?? Infinity, q: b?.q ?? 0 }, k];
+  });
+  if (parts.some(([c]) => !isFinite(c.cents))) return null;
+  return score(parts, r.n, r.st, r.tier);
+}
+
+function hashesOf(r) { return [...r.in.map(i => i[0]), ...r.outs.map(o => o[0])]; }
 
 const results = [];
 for (const st of [false, true]) {
@@ -126,14 +153,37 @@ for (const st of [false, true]) {
   }
 }
 
-const allG = results.filter(r => r.guaranteed).sort((a, b) => (b.worst - b.cost) / b.cost - (a.worst - a.cost) / a.cost);
+const byMin = (a, b) => (b.worst - b.cost) / b.cost - (a.worst - a.cost) / a.cost;
+let maybe = results.filter(r => r.guaranteed).sort(byMin);
+const want = [];
+for (const r of maybe) {
+  for (const h of hashesOf(r)) if (!verified[h] && !want.includes(h)) want.push(h);
+  if (want.length >= VERIFY_MAX) break;
+}
+const ov = await steamOverview(want, 3200, VERIFY_MAX);
+Object.assign(verified, ov.data);
+price.clear();
+log('verified', Object.keys(ov.data).length, 'prices on steam', ov.rate ? '(rate limited)' : '');
+const confirmed = [], pending = [];
+for (const r of maybe) {
+  const r2 = refresh(r);
+  if (!r2) continue;
+  if (!r2.guaranteed) { results.push(r2); continue; }
+  if (hashesOf(r2).every(h => P.checked(h))) { r2.confirmed = true; confirmed.push(r2); }
+  else pending.push(r2);
+}
+for (const r of results) if (r.guaranteed) r.guaranteed = false;
+for (const r of confirmed) r.guaranteed = true;
+const allG = confirmed.sort(byMin);
 const seen = new Set(allG.map(r => r.id));
 const pairKey = r => (r.st ? 'st:' : '') + r.in.map(i => i[0]).sort().join('+');
 const used = new Set();
 const guaranteed = [];
 for (const r of allG) { const k = pairKey(r); if (used.has(k)) continue; used.add(k); guaranteed.push(r); if (guaranteed.length >= 250) break; }
+const pend = [];
+for (const r of pending.sort(byMin)) { const k = pairKey(r); if (used.has(k)) continue; used.add(k); pend.push(r); if (pend.length >= 120) break; }
 const top = [];
-for (const r of results.filter(r => !r.guaranteed).sort((a, b) => b.roi - a.roi)) { const k = pairKey(r); if (used.has(k)) continue; used.add(k); top.push(r); if (top.length >= TOP) break; }
+for (const r of results.filter(r => !r.guaranteed && !r.confirmed).sort((a, b) => b.roi - a.roi)) { const k = pairKey(r); if (used.has(k)) continue; used.add(k); top.push(r); if (top.length >= TOP) break; }
 const lucky = results.filter(r => !r.guaranteed && r.win >= 0.5).sort((a, b) => b.win - a.win || b.roi - a.roi).slice(0, 150);
 for (const r of lucky) { const k = pairKey(r); if (used.has(k)) continue; used.add(k); top.push(r); }
 
@@ -162,12 +212,16 @@ for (const g of fresh.slice(0, 5)) {
 
 const skinsLite = { skins: meta.skins, collections: meta.collections };
 const prices = {};
-for (const [h, v] of price) prices[h] = [v.buy?.cents || 0, v.buy?.market || '', v.buy?.q || 0, v.sell?.net || 0, v.sell?.market || ''];
+for (const h of new Set([...Object.keys(steamCache), ...Object.keys(verified)])) {
+  const v = P.get(h);
+  if (v) prices[h] = [v.buy?.cents || 0, 'steam', v.buy?.q || 0, v.sell?.net || 0, 'steam', v.checked ? 1 : 0];
+}
+const strip = r => { const { _parts, ...o } = r; return o; };
 
 await mkdir(OUT, { recursive: true });
-await writeFile(`${OUT}/tradeups.json`, JSON.stringify({ at: now, took: Date.now() - t0, rateLimited, sources, guaranteed, top }));
-await writeFile(`${OUT}/state.json`, JSON.stringify({ steam: steamCache, steamAge, steamNext: sp.next, firstSeen, hollow }));
+await writeFile(`${OUT}/tradeups.json`, JSON.stringify({ at: now, took: Date.now() - t0, rateLimited: rateLimited || ov.rate, sources, guaranteed: guaranteed.map(strip), pending: pend.map(strip), top: top.map(strip) }));
+await writeFile(`${OUT}/state.json`, JSON.stringify({ steam: steamCache, steamAge, steamNext: sp.next, firstSeen, hollow, verified }));
 await writeFile(`${OUT}/hollow.json`, JSON.stringify({ at: now, hollow }));
 await writeFile(`${OUT}/prices.json`, JSON.stringify({ at: now, prices }));
 await writeFile(`${OUT}/skins.json`, JSON.stringify(skinsLite));
-log(`done: ${guaranteed.length} guaranteed, ${top.length} top, ${fresh.length} new, ${hollow.length} in the hollow`);
+log(`done: ${guaranteed.length} confirmed, ${pend.length} pending, ${top.length} top, ${fresh.length} new, ${hollow.length} in the hollow`);

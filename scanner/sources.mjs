@@ -9,8 +9,13 @@ const RARITY = {
 
 async function getJson(url, opts = {}) {
   if (process.env.FIXTURES) {
-    const key = url.includes('skinport') ? 'skinport' : url.includes('steamcommunity') ? 'steam' : url.includes('CSGO-API') ? 'skins' : 'other';
-    return JSON.parse(await readFile(`${process.env.FIXTURES}/${key}.json`, 'utf8'));
+    const key = url.includes('priceoverview') ? 'overview' : url.includes('steamcommunity') ? 'steam' : url.includes('CSGO-API') ? 'skins' : 'other';
+    const data = JSON.parse(await readFile(`${process.env.FIXTURES}/${key}.json`, 'utf8'));
+    if (key === 'overview') {
+      const name = decodeURIComponent(url.split('market_hash_name=')[1]);
+      return data[name] || { success: false };
+    }
+    return data;
   }
   const r = await fetch(url, { headers: { ...UA, ...(opts.headers || {}) } });
   if (r.status === 429) { const e = new Error('rate limited'); e.rate = true; throw e; }
@@ -40,11 +45,21 @@ export async function loadSkins() {
   return { skins, collections };
 }
 
-export async function skinportPrices() {
-  const list = await getJson('https://api.skinport.com/v1/items?app_id=730&currency=USD&tradable=0');
+const cents = s => s ? Math.round(parseFloat(String(s).replace(/[^0-9.]/g, '')) * 100) : 0;
+
+export async function steamOverview(names, delay = 3200, max = 40) {
   const out = {};
-  for (const i of list) if (i.min_price) out[i.market_hash_name] = { c: Math.round(i.min_price * 100), q: i.quantity || 0 };
-  return out;
+  let rate = false;
+  for (const n of names.slice(0, max)) {
+    try {
+      const j = await getJson(`https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(n)}`);
+      out[n] = j.success ? { lo: cents(j.lowest_price), med: cents(j.median_price), vol: parseInt(String(j.volume || '0').replace(/,/g, '')) || 0, at: Date.now() } : { lo: 0, med: 0, vol: 0, at: Date.now() };
+    } catch (e) {
+      if (e.rate) { rate = true; break; }
+    }
+    if (!process.env.FIXTURES) await sleep(delay);
+  }
+  return { data: out, rate };
 }
 
 export async function steamPages(start, pages, delay = 3500) {
