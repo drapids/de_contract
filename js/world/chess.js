@@ -12,7 +12,7 @@ export const RIVALS = [
   { id: 'yakub', name: 'Yakub', elo: 2600, skin: 'orange', lines: ['предсказуемо', 'я это видел за 12 ходов', '...'] }
 ];
 
-function lathe(prof, seg = 8) {
+export function lathe(prof, seg = 8) {
   const P = [], N = [], U = [], I = [];
   for (let i = 0; i < prof.length; i++) {
     const [r, y] = prof[i];
