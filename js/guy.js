@@ -308,7 +308,7 @@ export class Guy {
     this.resize();
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) requestAnimationFrame(this.loop); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && !this.paused) requestAnimationFrame(this.loop); });
   }
 
   async json(url) {
@@ -348,6 +348,13 @@ export class Guy {
     const b = this.baseRig, r = this.rig;
     const d = [0, 1, 2].map(i => r.pos(bone)[i] - b.pos(bone)[i]);
     return M4.mul(this.invRest(bone), M4.mul(M4.fromQT([0, 0, 0, 1], d), worldOrange));
+  }
+
+  pause(on) {
+    if (this.paused === on) return;
+    this.paused = on;
+    this.host.hidden = on;
+    if (!on) { this.last = 0; requestAnimationFrame(this.loop); }
   }
 
   async setSkin(name) {
@@ -995,7 +1002,7 @@ export class Guy {
   }
 
   loop(now) {
-    if (document.hidden) return;
+    if (document.hidden || this.paused) return;
     requestAnimationFrame(this.loop);
     now /= 1000;
     const dt = Math.min(0.05, now - (this.last || now));

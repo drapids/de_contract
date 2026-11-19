@@ -479,7 +479,7 @@ function bind() {
     store.set('settings', S.settings);
     $('#guy').hidden = !S.settings.guy; document.body.classList.toggle('noguy', !S.settings.guy);
     setVolume(S.settings.vol); setMusic(S.settings.bg); $('#snd').classList.toggle('off', !S.settings.bg);
-    if (old !== S.settings.skin) applySkin();
+    if (old !== S.settings.skin) { applySkin(); world?.setSkin(S.settings.skin || 'sas').catch(() => {}); }
   };
   for (const id of ['#s-worker', '#s-guy', '#s-music', '#s-skin', '#s-vol', '#s-bg']) $(id).addEventListener('change', save);
   $('#s-scene').onclick = () => window.dispatchEvent(new CustomEvent('dc:ratelimit', { detail: { retry: 30, manual: true } }));
@@ -512,5 +512,30 @@ if (await getLock()) {
 await applySkin();
 load();
 setInterval(() => { if (!document.hidden) load(); }, 5 * 60000);
+let world = null;
+const worldStatus = () => {
+  const d = S.data;
+  if (!d) return {};
+  const best = d.guaranteed.reduce((m, g) => Math.max(m, (g.worst - g.cost) / g.cost), -1);
+  return { sure: d.guaranteed.length, best: best > -1 ? '+' + (best * 100).toFixed(0) + '%' : '--', age: ago(d.at) };
+};
+function toSite() {
+  world?.leave();
+  document.body.classList.remove('inworld');
+  guy?.pause(!S.settings.guy);
+}
+async function toWorld() {
+  if (!world) {
+    const { World } = await import('./world/world.js');
+    world = new World($('#world'), { loader, skin: S.settings.skin || 'sas', status: worldStatus, volume: () => S.settings.vol, onTerminal: () => { sfx.beep?.(true); toSite(); }, onEvent: e => { if (e === 'terminal') sfx.key?.(); } });
+    window.dc.world = world;
+    await world.ready;
+  }
+  guy?.pause(true);
+  document.body.classList.add('inworld');
+  world.enter();
+}
+$('#home').onclick = () => toWorld();
+toWorld().catch(e => { console.error(e); toSite(); });
 setInterval(renderStatus, 30000);
 import('./specter.js').then(m => m.init?.(guy, S)).catch(() => {});
