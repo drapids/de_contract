@@ -4,6 +4,9 @@ import { T, paint } from './tex.js';
 import { Arm } from './arm.js';
 import { Durak } from './durak.js';
 import { Chess } from './chess.js';
+import { Bank } from './bank.js';
+import { Loot } from './loot.js';
+import { Wheel } from './wheel.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -46,6 +49,12 @@ export class World {
     this.arm = new Arm(this);
     this.durak = new Durak(this);
     this.chess = new Chess(this);
+    this.bank = new Bank(this);
+    this.loot = new Loot(this);
+    this.wheel = new Wheel(this);
+    const emit = opts.onEvent;
+    this.opts.onEvent = (ev, x) => { this.event(ev, x); emit?.(ev, x); };
+    this.npcs = [];
     this.ready = this.load();
   }
 
@@ -141,7 +150,7 @@ export class World {
 
     await this.put(sc, 'vending', 3.35, 0, -2.35, -90 * D, 1);
     this.solid(sc, 2.8, -3, 3.95, -1.7);
-    sc.acts.push({ p: [3.2, 1, -1.6], r: 1.3, label: 'автомат', act: () => this.say(['сломан. как всегда', 'денег нет', 'он сожрал мои рубли блять'][Math.random() * 3 | 0]) });
+    sc.acts.push({ p: [3.2, 1, -1.6], r: 1.3, label: 'автомат', act: () => this.loot.open('vend') });
 
     this.shape(sc, merge(boxG(0.9, 0.04, 0.3, 3.84, 1.5, 1.2), boxG(0.04, 0.2, 0.04, 3.95, 1.4, 0.85), boxG(0.04, 0.2, 0.04, 3.95, 1.4, 1.55)), t.wood);
     await this.put(sc, 'mexi', 3.82, 1.52, 1.2, -90 * D, 0.7);
@@ -238,9 +247,96 @@ export class World {
     this.shape(sc, merge(boxG(0.12, 1.8, 0.12, -9, 0.9, -5), boxG(0.12, 1.8, 0.12, -9, 0.9, -1), boxG(0.06, 0.06, 4, -9, 1.6, -3)), t.rust);
     this.solid(sc, -9.1, -5.1, -8.9, -0.9, 1.8);
 
+    const hz = new Avatar(this.e);
+    hz.load('assets/chars/hazmat').then(() => { hz.play('Idle_FoldArms_Loop'); hz.pos = [8.6, 0, 4.2]; hz.yaw = Math.PI * 0.95; this.npcs.push({ av: hz, scene: 'yard' }); }).catch(() => {});
+    this.solid(sc, 8.3, 3.9, 8.9, 4.5, 2);
+    sc.acts.push({ p: [8.6, 1.2, 4.0], r: 1.4, label: 'скупка (хазмат)', act: () => { this.say(['чё продаёшь', 'скрап есть скрап']); this.loot.inventory(); } });
+    this.wheel.draw();
+    const wg = this.e.texCanvas(this.wheel.cv);
+    this.shape(sc, merge(boxG(0.12, 1.1, 0.12, 6.7, 0.55, 4.4), boxG(1.5, 0.1, 0.5, 6.7, 0.05, 4.4)), t.rust);
+    this.shape(sc, poly([[7.35, 0.75, 4.32], [6.05, 0.75, 4.32], [6.05, 2.05, 4.32], [7.35, 2.05, 4.32]], [0, 0, -1], [[0, 1], [1, 1], [1, 0], [0, 0]]), wg);
+    this.solid(sc, 5.95, 4.15, 7.45, 4.65, 2.1);
+    sc.acts.push({ p: [6.7, 1.3, 4.1], r: 1.5, label: 'колесо', act: () => this.wheel.open() });
+    this.dropAt = [-1.5, 0, 2.2];
+    this.drop = this.e.shape(merge(boxG(0.9, 0.6, 0.9, 0, 0.3, 0), boxG(0.95, 0.08, 0.95, 0, 0.62, 0), boxG(0.06, 0.66, 0.95, 0.47, 0.33, 0), boxG(0.06, 0.66, 0.95, -0.47, 0.33, 0)), this.e.texCanvas(paint(32, 32, (x) => { x.fillStyle = '#3a5f8a'; x.fillRect(0, 0, 32, 32); x.fillStyle = '#e8e2c8'; x.fillRect(0, 13, 32, 6); x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(0, 0, 32, 2); })));
+    this.smoke = this.e.shape(boxG(0.25, 0.25, 0.25), null, [0.35, 0.9, 0.4, 1]);
+    sc.acts.push({ p: [this.dropAt[0], 0.7, this.dropAt[2]], r: 1.4, label: 'открыть аирдроп', cond: () => this.bank.dropReady(), act: () => this.claimDrop() });
+    this.chicken = { pos: [2, 0, 3], yaw: 0, tgt: [2, 0, 3], fly: 0, vy: 0, t: 0 };
+    this.chickenObj = {
+      body: this.e.shape(merge(boxG(0.18, 0.16, 0.26, 0, 0.26, 0), boxG(0.12, 0.14, 0.11, 0, 0.38, 0.12), boxG(0.06, 0.1, 0.04, 0, 0.3, -0.15)), null, [0.93, 0.92, 0.86, 1]),
+      comb: this.e.shape(merge(boxG(0.03, 0.05, 0.08, 0, 0.47, 0.12), boxG(0.03, 0.04, 0.03, 0, 0.36, 0.19)), null, [0.8, 0.12, 0.1, 1]),
+      beak: this.e.shape(boxG(0.04, 0.03, 0.05, 0, 0.39, 0.2), null, [0.9, 0.6, 0.1, 1]),
+      legs: this.e.shape(merge(boxG(0.02, 0.18, 0.02, 0.05, 0.09, 0), boxG(0.02, 0.18, 0.02, -0.05, 0.09, 0)), null, [0.9, 0.6, 0.1, 1])
+    };
+    sc.acts.push({ p: this.chicken.pos, r: 1.0, label: 'пнуть курицу', cond: () => !this.chicken.fly, act: () => this.kickChicken() });
     sc.lights = (now, night) => night
       ? [{ pos: [3.0, 4.6, -3], color: [1, 0.78, 0.45], r: 11, k: 1.4 }, { pos: [1.5, 2.6, -7.2], color: [0.9, 0.85, 0.6], r: 4, k: 0.9 }]
       : [{ pos: [0, 30, 0], color: [1, 0.97, 0.9], r: 80, k: 0.7 }];
+  }
+
+  event(ev, x) {
+    const m = /^(arm|durak|chess)_(win|lose|w|l|d)$/.exec(ev);
+    if (m) this.bank.reward(m[1], x, m[2][0] === 'w' ? 'w' : m[2][0] === 'd' ? 'd' : 'l');
+  }
+
+  claimDrop() {
+    if (!this.bank.dropReady()) return;
+    this.bank.claimDrop();
+    this.bank.add(400, 60, 20);
+    const cr = this.loot.crates();
+    if (cr.length && Math.random() < 0.35) {
+      const it = this.loot.roll(cr[Math.random() * cr.length | 0]);
+      this.bank.s.inv.push(it); this.bank.save();
+      this.say('в аирдропе был скин: ' + it.hash.replace(/ \(.*\)$/, ''), 3500);
+    } else this.say(['аирдроп мой', 'халява', 'спасибо самолёт']);
+    this.opts.sfx?.ok?.();
+  }
+
+  kickChicken() {
+    const c = this.chicken, av = this.av;
+    const dx = c.pos[0] - av.pos[0], dz = c.pos[2] - av.pos[2], l = Math.hypot(dx, dz) || 1;
+    c.fly = 1; c.vy = 4.5; c.vx = dx / l * 4; c.vz = dz / l * 4;
+    av.yaw = Math.atan2(dx, dz);
+    av.play('Interact', true); av.onDone = () => av.play('Idle_Loop');
+    this.say(['кудах', 'ГОООЛ', 'прости курочка'], 1600);
+    this.opts.sfx?.poke?.();
+  }
+
+  chickenStep(dt, now) {
+    const c = this.chicken, av = this.av;
+    if (c.fly) {
+      c.pos[0] += c.vx * dt; c.pos[2] += c.vz * dt; c.pos[1] += c.vy * dt; c.vy -= 9 * dt; c.spin = (c.spin || 0) + dt * 14;
+      const [X0, X1, Z0, Z1] = this.scenes.yard.bounds;
+      c.pos[0] = Math.max(X0 + 0.3, Math.min(X1 - 0.3, c.pos[0])); c.pos[2] = Math.max(Z0 + 0.3, Math.min(Z1 - 0.3, c.pos[2]));
+      if (c.pos[1] <= 0) { c.pos[1] = 0; c.fly = 0; c.spin = 0; c.tgt = c.pos.slice(); }
+      return;
+    }
+    const dx = c.pos[0] - av.pos[0], dz = c.pos[2] - av.pos[2], d = Math.hypot(dx, dz);
+    let sp = 0.5;
+    if (d < 1.6 && this.scene === this.scenes.yard) { c.tgt = [c.pos[0] + dx / d * 2.5, 0, c.pos[2] + dz / d * 2.5]; sp = 2.2; }
+    const tx = c.tgt[0] - c.pos[0], tz = c.tgt[2] - c.pos[2], tl = Math.hypot(tx, tz);
+    if (tl < 0.1) { if (Math.random() < dt * 0.6) c.tgt = [c.pos[0] + (Math.random() - 0.5) * 6, 0, c.pos[2] + (Math.random() - 0.5) * 6]; c.walk = 0; }
+    else { c.pos[0] += tx / tl * sp * dt; c.pos[2] += tz / tl * sp * dt; c.yaw = Math.atan2(tx, tz); c.walk = sp; }
+    const [X0, X1, Z0, Z1] = this.scenes.yard.bounds;
+    c.pos[0] = Math.max(X0 + 0.3, Math.min(X1 - 0.3, c.pos[0])); c.pos[2] = Math.max(Z0 + 0.3, Math.min(Z1 - 0.3, c.pos[2]));
+    const before = c.pos.slice();
+    this.collide(c.pos, 0.15);
+    if (Math.hypot(before[0] - c.pos[0], before[2] - c.pos[2]) > 0.001) c.tgt = c.pos.slice();
+  }
+
+  drawYardExtras(now) {
+    const e = this.e, c = this.chicken, o = this.chickenObj;
+    const bob = c.walk ? Math.abs(Math.sin(now * 14)) * 0.03 : Math.sin(now * 2) * 0.005;
+    const m = M4.mul(M4.mul(at(c.pos[0], c.pos[1] + bob, c.pos[2]), M4.rotY(c.yaw)), rotX(c.spin || 0));
+    e.draw(o.body, m); e.draw(o.comb, m); e.draw(o.beak, m); e.draw(o.legs, m);
+    if (this.bank.dropReady()) {
+      const D = this.dropAt;
+      e.draw(this.drop, at(D[0], 0, D[2]));
+      for (let i = 0; i < 6; i++) {
+        const k = ((now * 0.35 + i / 6) % 1), s = 0.35 + k * 1.1;
+        e.draw(this.smoke, M4.mul(at(D[0] + 0.5 + Math.sin(i * 3 + now) * 0.2 * k, 0.7 + k * 3.2, D[2] + Math.cos(i * 2) * 0.3 * k), M4.fromQT([0, 0, 0, 1], [0, 0, 0], s)), { unlit: 1, tint: [0.85, 0.9, 0.85, 1] });
+      }
+    }
   }
 
   timeOfDay() {
@@ -472,6 +568,7 @@ export class World {
     this.last = ms;
     if (!this.scene) return;
     this.step(dt, now);
+    this.chickenStep(dt, now);
     const f = this.flick;
     if (now > f.next) { f.until = now + 0.15 + Math.random() * 0.5; f.next = now + 4 + Math.random() * 14; }
     f.k = now < f.until ? (Math.random() < 0.5 ? 0.15 : 0.9) : 1;
@@ -496,6 +593,8 @@ export class World {
     if (this.windowQ) this.windowQ.groups[0].tint = night ? [0.12, 0.15, 0.3, 1] : [0.75, 0.82, 0.9, 1];
     if (!this.chessOn) this.av.draw();
     if (sc === this.scenes.basement) this.chess.draw();
+    for (const n of this.npcs) if (this.scenes[n.scene] === sc) { n.av.update(Math.min(dt, 0.05)); n.av.draw(); }
+    if (sc === this.scenes.yard) this.drawYardExtras(now);
     if (this.chessOn && this.chess.g) this.chess.foe.draw();
     if (this.match) this.arm.foe.draw();
     if (this.durakOn && this.durak.g) this.durak.foe.draw();
@@ -506,6 +605,7 @@ export class World {
     const av = this.av, p = this.$('.w-prompt');
     let best = null, bd = 1e9;
     if (!this.busy && !this.seated) for (const a of this.scene.acts) {
+      if (a.cond && !a.cond()) continue;
       const dx = a.p[0] - av.pos[0], dz = a.p[2] - av.pos[2], d = Math.hypot(dx, dz);
       if (d > a.r) continue;
       const facing = Math.cos(Math.atan2(dx, dz) - av.yaw);
