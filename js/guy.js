@@ -474,7 +474,7 @@ export class Guy {
     at(0.9, () => { S.vx = 0; this.lookT = [1, -0.1]; this.lookLock = true; });
     at(1.7, () => { this.sceneTurn = 60; this.set('scared'); this.say('uh. hello?', 1500); });
     at(2.5, () => { this.spookDo('Zombie_Walk_Fwd_Loop'); S.vx = -0.32; });
-    at(3.0, () => { this.sceneTurn = -90; this.set('sprint'); this.vx = -0.55; this.say('NOPE', 1200); });
+    at(3.0, () => { this.sceneTurn = -90; this.set('sprint'); this.vx = -0.4; this.say('NOPE', 1200); });
     at(4.3, () => { this.vx = 0; this.sceneTurn = 90; this.set('aim'); this.armed = true; this.say('stay back im warning you', 1600); });
     if (variant === 'flip') {
       at(5.1, () => { S.vx = 0; this.spookDo('Zombie_Scratch', { once: true }); });
