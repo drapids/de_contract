@@ -183,6 +183,7 @@ export class Guy {
     this.host = host;
     this.base = opts.base || 'assets/';
     this.loader = opts.loader || null;
+    this.emit = opts.onEvent || (() => {});
     this.scale = opts.pixel || 2;
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'guy-gl';
@@ -472,6 +473,62 @@ export class Guy {
     this.verdictSaid = false;
   }
 
+  terminal(on, title = '') {
+    if (on) {
+      this.cine = true; this.termLines = [title || 'de_contract terminal']; this.termDirty = true;
+      this.preCine = this.state === 'type' ? 'idle' : this.state;
+      this.sceneTurn = 0;
+      this.set('type');
+      document.body.classList.add('cinema');
+    } else {
+      this.cine = false;
+      document.body.classList.remove('cinema');
+      this.sceneTurn = null;
+    }
+  }
+
+  log(line) {
+    if (!this.termLines) this.termLines = [];
+    this.termLines.push(line);
+    this.termLines = this.termLines.slice(-9);
+    this.termDirty = true;
+    window.dispatchEvent(new CustomEvent('dc:termlog', { detail: line }));
+  }
+
+  paintTerm(now) {
+    const c = this.termCanvas || (this.termCanvas = this.paint(256, 192, () => {}));
+    const x = c.getContext('2d');
+    x.fillStyle = '#071107'; x.fillRect(0, 0, 256, 192);
+    x.fillStyle = '#62e062'; x.font = 'bold 13px monospace';
+    (this.termLines || []).forEach((l, i) => x.fillText(String(l).slice(0, 30), 8, 20 + i * 19));
+    if (Math.floor(now * 2) % 2) x.fillRect(8 + Math.min(29, String(this.termLines?.at(-1) || '').length) * 7.8, 6 + ((this.termLines?.length || 1) - 1) * 19 + 4, 7, 13);
+    x.fillStyle = 'rgba(0,0,0,.25)'; for (let y = 0; y < 192; y += 3) x.fillRect(0, y, 256, 1);
+    if (!this.termTex) this.termTex = this.texFromCanvas(c);
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.termTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  }
+
+  drawTerminal(now, bw) {
+    if (!this.desk) {
+      this.desk = this.rigid(merge(box(1.0, 0.05, 0.62, 0, 0, 0), box(0.05, 1.4, 0.05, -0.45, -0.7, -0.27), box(0.05, 1.4, 0.05, 0.45, -0.7, -0.27), box(0.05, 1.4, 0.05, -0.45, -0.7, 0.27), box(0.05, 1.4, 0.05, 0.45, -0.7, 0.27)));
+      this.crt = this.rigid(merge(box(0.5, 0.42, 0.42, 0, 0.21, 0), box(0.38, 0.3, 0.2, 0, 0.21, -0.3)));
+      this.crtFace = this.rigid(quad(0.42, 0.32, 0.228));
+      this.keys = this.rigid(box(0.46, 0.03, 0.16));
+    }
+    const pl = M4.pos(bw('hand.l')), pr = M4.pos(bw('hand.r'));
+    const ky = Math.min(pl[1], pr[1]) - 0.04, kz = (pl[2] + pr[2]) / 2 + 0.02;
+    this.deskY ??= ky - 0.03; this.deskZ ??= kz + 0.12;
+    const dy = this.deskY, dz = this.deskZ;
+    this.drawRigid(this.desk, M4.fromQT([0, 0, 0, 1], [0, dy, dz]), this.crateTex, [0.8, 0.7, 0.6, 1]);
+    this.drawRigid(this.keys, M4.fromQT([0, 0, 0, 1], [0, dy + 0.04, dz - 0.14]), this.white, [0.55, 0.53, 0.46, 1]);
+    const cm = M4.mul(M4.fromQT([0, 0, 0, 1], [-0.28, dy + 0.03, dz + 0.36]), M4.rotY(Math.PI - 0.75));
+    this.drawRigid(this.crt, cm, this.white, [0.62, 0.6, 0.52, 1]);
+    if (this.termDirty || !this.tt || now - this.tt > 0.5) { this.tt = now; this.termDirty = false; this.paintTerm(now); }
+    this.drawRigid(this.crtFace, M4.mul(cm, M4.fromQT([0, 0, 0, 1], [0, 0.21, 0])), this.termTex, [1, 1, 1, 1], 1);
+  }
+
   verdict() {
     const m = this.holdMeta || {}, n = (this.card2d.dataset.name || '').toLowerCase();
     if (n.includes('★')) return pick(['oh thats a KNIFE knife', 'imagine pulling this', 'yeah i want this one']);
@@ -488,7 +545,11 @@ export class Guy {
     this.blend = 0;
     this.stateStart = performance.now() / 1000;
     this.active = performance.now();
-    if (state === 'dubs') this.burst();
+    if (state === 'dubs') { this.burst(); this.emit('dubs'); }
+    if (state === 'fail') this.emit('fail');
+    if (state === 'hit') this.emit('poke');
+    if (state === 'push') this.emit('push');
+    if (['fold', 'phone', 'watch', 'no'].includes(state)) this.emit('idle');
     if (state === 'fail') this.say(pick(LINES.fail), 2400);
     if (state === 'phone') this.say(pick(LINES.phone), 3200);
     clearTimeout(this.holdTimer);
@@ -589,6 +650,7 @@ export class Guy {
   }
 
   shot(who) {
+    this.emit('shot');
     this.shots = (this.shots || []).concat({ who, t: this.now });
     if (who === 'guy') this.spook.flick = this.now;
   }
@@ -698,7 +760,7 @@ export class Guy {
     let tgt = [0, lerp(1.24, 1.3, z) + w * 0.25, 0];
     let shift = anchor;
     if (k > 0) {
-      const c = this.cineCam || { eye: [1.7, 0.45, 1.5], tgt: [0, 1.25, 0.25] };
+      const c = this.cineCam || { eye: [1.55, 0.5, 0.8], tgt: [-0.05, 1.3, 0.3] };
       eye = eye.map((v, i) => lerp(v, c.eye[i], k));
       tgt = tgt.map((v, i) => lerp(v, c.tgt[i], k));
       shift = lerp(anchor, 0, k);
@@ -815,6 +877,18 @@ export class Guy {
       p.hip = [0, 0, bop * wave(t, 0.95) * 2];
       root = [0, bop * Math.abs(beat) * 0.006 - sigh * 0.008, 0];
       turn = -14;
+    } else if (state === 'type') {
+      const T = window.__T || [[-10, -22, -82], [0, -62, 22], [0, 0, 0]];
+      const tapL = Math.max(0, wave(t, 3.1)) * 9, tapR = Math.max(0, wave(t, 3.1, 1.7)) * 9;
+      const lean = (t % 7) > 4.5 && (t % 7) < 6.2 ? Math.sin(((t % 7) - 4.5) / 1.7 * Math.PI) : 0;
+      p = mirror({ ...arms, 'upperArm.l': T[0], 'lowerArm.l': T[1], 'hand.l': T[2] });
+      p['hand.l'] = [tapL, 0, -6]; p['hand.r'] = [tapR, 0, 6];
+      p['upperArm.l'] = [T[0][0] - tapL * 0.3, T[0][1], T[0][2]];
+      p['upperArm.r'] = [T[0][0] - tapR * 0.3, -T[0][1], -T[0][2]];
+      p.chest = [6 + lean * 10 + breathe, 0, 0];
+      p.head = [6 + lean * 6 + wave(t, 0.4) * 3, wave(t, 0.23) * 6, 0];
+      root = [0, -lean * 0.01, 0];
+      turn = 0;
     } else if (state === 'dubs') {
       const s = t;
       const up = back(s / 0.55);
@@ -857,6 +931,7 @@ export class Guy {
     now /= 1000;
     const dt = Math.min(0.05, now - (this.last || now));
     this.last = now;
+    const real = now;
     if (this.fps) now = Math.floor(now * this.fps) / this.fps;
     if (this.lookLock) this.lookT = [1, -0.1];
     this.look[0] += (this.lookT[0] - this.look[0]) * Math.min(1, dt * 6);
@@ -878,8 +953,10 @@ export class Guy {
     if (this.state === 'dubs') this.glasses = Math.min(1, st / 0.7);
     else if (this.glasses > 0) this.glasses = Math.max(0, this.glasses - dt * 2.5);
     this.zoom = Math.max(0, Math.min(1, (this.zoom || 0) + (this.state === 'hold' ? dt : -dt) * 2.2));
+    this.cineK = Math.max(0, Math.min(1, (this.cineK || 0) + (this.cine ? dt : -dt) * 1.6));
     this.wide = Math.max(0, Math.min(1, (this.wide || 0) + (this.state === 'dubs' ? dt : -dt) * 2.5));
     this.now = now;
+    if (this.state === 'type' && real - (this.lastKey || 0) > 0.07 + Math.random() * 0.12) { this.lastKey = real; this.emit('key'); }
     this.runScene(dt);
     this.tick(now, st);
     this.draw(cur, now, st);
@@ -1060,6 +1137,7 @@ export class Guy {
       this.drawRigid(this.gun, gm, this.gunTex, [1, 1, 1, 1], 0.15, 0.8);
       this.muzzle = M4.mul(model, M4.mul(gm, M4.fromQT([0, 0, 0, 1], [2.05, 1.38, 0])));
     }
+    if (this.cineK > 0.02) this.drawTerminal(now, bw);
     if (this.spook.on) this.drawSpook(VP, now);
     this.drawShots(VP, now);
     if (holdK <= 0.01 && this.cardShown) { this.card2d.style.opacity = 0; this.cardShown = false; }

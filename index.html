@@ -12,6 +12,8 @@
   <header class="bar">
     <div class="logo">de_contract<span class="ver">v1.0</span></div>
     <div class="status" id="status">loading...</div>
+    <button class="btn" id="snd" title="music">&#9835;</button>
+    <button class="btn" id="force">force scan</button>
     <button class="btn" id="refresh">refresh</button>
   </header>
 
@@ -133,7 +135,10 @@
           <label>worker url <input class="inp wide" id="s-worker" placeholder="https://de-contract.yourname.workers.dev"></label>
           <p class="dim">needed for live recheck + inventory. setup is in the readme.</p>
           <label class="chk"><input type="checkbox" id="s-guy" checked> show the guy</label>
-          <label class="chk"><input type="checkbox" id="s-music" checked> music on the rate limit scene</label>
+          <label>mascot <select class="sel" id="s-skin"><option value="sas">CT (SAS)</option><option value="phoenix">T (Phoenix)</option><option value="orange">orange guy</option></select></label>
+          <label>volume <input type="range" id="s-vol" min="0" max="1" step="0.05"></label>
+          <label class="chk"><input type="checkbox" id="s-bg" checked> background music</label>
+          <label class="chk"><input type="checkbox" id="s-music" checked> youtube song on the rate limit scene</label>
           <button class="btn" id="s-scene">play the rate limit scene</button>
         </div>
       </div>
@@ -148,6 +153,7 @@
     </div>
   </div>
 
+  <div class="cine" id="cine"><div class="cine-log" id="cine-log"></div></div>
   <div class="guy" id="guy"></div>
   <footer class="foot">made by mason arcieri · prices from steam + skinport · not financial advice lol</footer>
 </div>

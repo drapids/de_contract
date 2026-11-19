@@ -1,5 +1,6 @@
 import { Db, TIERS, TIER_COLORS, WEARS, wearsFor, wearSpan, hashName, outcomes, parseHash, usd, netAfterFee } from './tradeup.js';
 import { Guy } from './guy.js';
+import { setup as soundSetup, sfx, setMusic, setVolume } from './sound.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -16,7 +17,7 @@ const store = {
 
 const S = {
   data: null, db: null, prices: {}, hollow: [],
-  settings: store.get('settings', { worker: '', guy: true, music: true }),
+  settings: { worker: '', guy: true, music: true, bg: true, vol: 0.5, skin: 'sas', ...store.get('settings', {}) },
   tracker: store.get('tracker', []),
   calc: { st: false, rows: [] }
 };
@@ -93,7 +94,7 @@ function outTable(t, live) {
   return `<table class="t"><tr><th></th><th>outcome</th><th class="n">odds</th><th class="n">float</th><th class="n">you get (after fee)</th></tr>${rows}</table>`;
 }
 
-function openTrade(t) {
+function openTrade(t, quiet) {
   if (!t) return;
   const minP = (t.worst - t.cost) / t.cost;
   $('#m-title').textContent = `${t.st ? 'StatTrak ' : ''}${TIERS[t.tier]} → ${t.tier === 5 ? 'knife/gloves' : TIERS[t.tier + 1]}`;
@@ -114,7 +115,8 @@ function openTrade(t) {
     <div id="m-outs">${outTable(t)}</div>
     <div id="m-live"></div>
     <div class="dlg-actions">
-      <button class="btn go" id="m-recheck">recheck live prices</button>
+      <button class="btn go" id="m-send">send it to him</button>
+      <button class="btn" id="m-recheck">recheck live prices</button>
       <button class="btn" id="m-log">i did this one</button>
       <button class="btn" id="m-calc">open in calculator</button>
       <button class="btn" id="m-copy">copy link</button>
@@ -122,7 +124,7 @@ function openTrade(t) {
   $('#modal').hidden = false;
   history.replaceState(null, '', '#t=' + encodeURIComponent(t.id));
   const best = [...t.outs].sort((a, b) => b[3] - a[3])[0];
-  if (guy) {
+  if (guy && !quiet) {
     guy.hold(best[5], best[0], { profit: best[3] - t.cost, tier: t.tier + 1 });
     clearTimeout(S.reactTimer);
     S.reactTimer = setTimeout(() => {
@@ -132,6 +134,7 @@ function openTrade(t) {
     }, 2600);
   }
   $('#m-recheck').onclick = () => recheck(t);
+  $('#m-send').onclick = () => recheck(t, true);
   $('#m-log').onclick = () => logTrade(t);
   $('#m-calc').onclick = () => toCalc(t);
   $('#m-copy').onclick = () => navigator.clipboard?.writeText(location.href);
@@ -143,22 +146,32 @@ function closeModal() {
   if (guy && ['hold', 'dubs', 'fail'].includes(guy.state)) guy.set('idle');
 }
 
-async function worker(path) {
+async function worker(path, opts = {}) {
   const base = S.settings.worker.replace(/\/$/, '');
   if (!base) throw Object.assign(new Error('no worker url set, add it in settings'), { soft: true });
-  const r = await fetch(base + path);
+  const r = await fetch(base + path, { ...opts, headers: { 'x-key': S.key || '', ...(opts.headers || {}) } });
+  if (r.status === 401) throw new Error('worker says wrong key');
   if (r.status === 429) throw Object.assign(new Error('rate limited'), { rate: true });
   if (!r.ok) throw new Error('worker said ' + r.status);
   return r.json();
 }
 
-async function recheck(t) {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function recheck(t, cine) {
   const btn = $('#m-recheck');
-  btn.disabled = true; btn.textContent = 'checking...';
-  guy?.set('loading');
+  if (btn) { btn.disabled = true; btn.textContent = 'checking...'; }
+  const log = l => cine && guy?.log(l);
+  if (cine && guy) { closeModal(); guy.terminal(true, '> recheck ' + t.in.map(i => i[1] + 'x ' + short(i[0])).join(' + ').slice(0, 26)); }
+  else guy?.set('loading');
   const names = [...new Set([...t.in.map(i => i[0]), ...t.outs.map(o => o[0])])];
   try {
+    log('pulling ' + names.length + ' prices...');
+    if (cine) await sleep(900);
+    log('steam + skinport...');
     const live = await worker('/prices?names=' + encodeURIComponent(JSON.stringify(names)));
+    log('got em. crunching');
+    if (cine) await sleep(800);
     let cost = 0, worst = Infinity, ev = 0, win = 0, missing = [];
     const outs = {};
     for (const i of t.in) {
@@ -174,6 +187,10 @@ async function recheck(t) {
     }
     for (const o of t.outs) if (outs[o[0]] > cost) win += o[1];
     const sure = worst > cost;
+    log(`cost ${usd(cost)} worst ${usd(worst)}`);
+    log(sure ? 'STILL GUARANTEED' : 'not guaranteed');
+    if (cine) { await sleep(1600); guy.terminal(false); }
+    if (cine) { openTrade(t, true); }
     $('#m-outs').innerHTML = outTable(t, { cost, outs });
     $('#m-live').innerHTML = `<div class="note">live: cost <b>${usd(cost)}</b> (was ${usd(t.cost)}), worst <b class="${sure ? 'ok' : 'bad'}">${usd(worst)}</b>, ev ${usd(Math.round(ev))}, win ${pct(win)}. ${sure ? '<span class="ok">still guaranteed</span>' : t.guaranteed ? '<span class="bad">not guaranteed anymore</span>' : ''}${missing.length ? `<br><span class="dim">no live price for ${missing.length} input(s), used scan price</span>` : ''}</div>`;
     if (guy) {
@@ -181,11 +198,14 @@ async function recheck(t) {
       else guy.set('fail', 3000);
     }
   } catch (e) {
+    log('ERROR: ' + e.message);
+    if (cine) { await sleep(1800); guy.terminal(false); openTrade(t, true); }
     $('#m-live').innerHTML = `<div class="note bad">${esc(e.message)}</div>`;
     if (e.rate) window.dispatchEvent(new CustomEvent('dc:ratelimit', { detail: { retry: 60 } }));
     else guy?.set(e.soft ? 'no' : 'fail', 2500);
   } finally {
-    btn.disabled = false; btn.textContent = 'recheck live prices';
+    const b = $('#m-recheck');
+    if (b) { b.disabled = false; b.textContent = 'recheck live prices'; }
   }
 }
 
@@ -329,6 +349,40 @@ async function loadInv() {
   }
 }
 
+async function forceScan() {
+  if (!guy) return;
+  const b = $('#force'); b.disabled = true;
+  guy.terminal(true, '> force scan');
+  try {
+    guy.log('waking up github...');
+    await sleep(700);
+    await worker('/scan', { method: 'POST' });
+    guy.log('scan dispatched');
+    await sleep(900);
+    guy.log('scanning ~1M contracts');
+    await sleep(900);
+    guy.log('results in like 3 min');
+    S.waitingFor = S.data?.at || 0;
+    await sleep(1800);
+    guy.terminal(false);
+    guy.say('ill ping you when its done', 2400);
+    pollScan(0);
+  } catch (e) {
+    guy.log('ERROR: ' + e.message);
+    await sleep(2000);
+    guy.terminal(false);
+    guy.set(e.soft ? 'no' : 'fail', 2500);
+  } finally { b.disabled = false; }
+}
+
+async function pollScan(n) {
+  if (n > 16) return;
+  await sleep(30000);
+  await load();
+  if (S.data?.at && S.data.at !== S.waitingFor) { guy?.say('fresh scan is in', 2500); return; }
+  pollScan(n + 1);
+}
+
 function tab(name) {
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
   $$('.pane').forEach(p => p.classList.toggle('on', p.id === 'tab-' + name));
@@ -370,6 +424,9 @@ function bind() {
   $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
   $('#refresh').onclick = () => load(true);
+  $('#force').onclick = forceScan;
+  $('#snd').onclick = () => { S.settings.bg = !S.settings.bg; $('#s-bg').checked = S.settings.bg; store.set('settings', S.settings); setMusic(S.settings.bg); $('#snd').classList.toggle('off', !S.settings.bg); };
+  window.addEventListener('dc:termlog', e => { const c = $('#cine-log'); c.insertAdjacentHTML('beforeend', `<div>${esc(e.detail)}</div>`); while (c.children.length > 6) c.firstChild.remove(); });
 
   $('#c-search').addEventListener('input', () => {
     const q = $('#c-search').value.trim().toLowerCase();
@@ -409,8 +466,17 @@ function bind() {
 
   const st = S.settings;
   $('#s-worker').value = st.worker; $('#s-guy').checked = st.guy; $('#s-music').checked = st.music;
-  const save = () => { S.settings = { worker: $('#s-worker').value.trim(), guy: $('#s-guy').checked, music: $('#s-music').checked }; store.set('settings', S.settings); $('#guy').hidden = !S.settings.guy; document.body.classList.toggle('noguy', !S.settings.guy); };
-  for (const id of ['#s-worker', '#s-guy', '#s-music']) $(id).addEventListener('change', save);
+  $('#s-skin').value = st.skin; $('#s-vol').value = st.vol; $('#s-bg').checked = st.bg;
+  $('#snd').classList.toggle('off', !st.bg);
+  const save = () => {
+    const old = S.settings.skin;
+    S.settings = { worker: $('#s-worker').value.trim(), guy: $('#s-guy').checked, music: $('#s-music').checked, skin: $('#s-skin').value, vol: +$('#s-vol').value, bg: $('#s-bg').checked };
+    store.set('settings', S.settings);
+    $('#guy').hidden = !S.settings.guy; document.body.classList.toggle('noguy', !S.settings.guy);
+    setVolume(S.settings.vol); setMusic(S.settings.bg); $('#snd').classList.toggle('off', !S.settings.bg);
+    if (old !== S.settings.skin) applySkin();
+  };
+  for (const id of ['#s-worker', '#s-guy', '#s-music', '#s-skin', '#s-vol', '#s-bg']) $(id).addEventListener('change', save);
   $('#s-scene').onclick = () => window.dispatchEvent(new CustomEvent('dc:ratelimit', { detail: { retry: 30, manual: true } }));
   $('#guy').hidden = !st.guy;
   document.body.classList.toggle('noguy', !st.guy);
@@ -420,11 +486,20 @@ tierOptions($('#g-tier'));
 tierOptions($('#f-tier'));
 bind();
 renderTracker();
-if (S.settings.guy) {
-  try { guy = new Guy($('#guy'), { base: 'assets/' }); window.guy = guy; } catch (e) { guy = null; }
+soundSetup('assets/', { music: S.settings.bg, volume: S.settings.vol });
+const onEvent = e => { if (sfx[e]) sfx[e](); else sfx.voice(e); };
+async function applySkin() {
+  if (!guy) return;
+  const sk = S.settings.skin || 'sas';
+  try {
+    await guy.setSkin(sk);
+    if (guy.spookRig?.ghost !== false) await guy.setGhost(sk === 'phoenix' ? 'sas' : 'phoenix');
+  } catch (e) { await guy.setSkin('orange'); }
 }
+try { guy = new Guy($('#guy'), { base: 'assets/', loader: window.dcLoader, onEvent }); window.guy = guy; } catch (e) { guy = null; }
 window.dc = { S, get guy() { return guy; } };
 await guy?.ready;
+await applySkin();
 load();
 setInterval(() => { if (!document.hidden) load(); }, 5 * 60000);
 setInterval(renderStatus, 30000);

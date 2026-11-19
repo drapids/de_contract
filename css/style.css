@@ -223,3 +223,12 @@ body.noguy .modal { padding-right: 20px; }
 .rl-count { flex: 1; color: var(--dim); font-size: 11px; }
 .rl-music { position: fixed; width: 2px; height: 2px; right: 0; bottom: 0; border: 0; opacity: .01; pointer-events: none; }
 .yard .empty { grid-column: 1 / -1; }
+
+.cine { position: fixed; inset: 0; z-index: 24; pointer-events: none; opacity: 0; transition: opacity .6s; background: radial-gradient(ellipse at 60% 40%, #1d2a1b 0%, #0b0f0a 70%); }
+.cine::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(0,0,0,.25) 0 2px, transparent 2px 4px); }
+body.cinema .cine { opacity: 1; pointer-events: auto; }
+body.cinema .guy-bubble { display: none; }
+.cine-log { position: absolute; left: 40px; bottom: 40px; width: min(900px, 80vw); font: bold 18px monospace; color: #62e062; text-shadow: 0 0 6px #2f8a2f; }
+.cine-log div { animation: typein .25s steps(12); white-space: nowrap; overflow: hidden; }
+@keyframes typein { from { width: 0; } to { width: 100%; } }
+#snd.off { color: #6f7867; text-decoration: line-through; }
