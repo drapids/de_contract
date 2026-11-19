@@ -1,6 +1,21 @@
 # de_contract
 
-finds cs2 trade ups that actually make money. scans every possible contract against steam + skinport prices every 5 min, shows the ones where every outcome sells for more than you paid (after fees), plus a calculator, inventory import, a tracker and the hollow.
+a basement you hang out in. theres a crt in the corner that finds cs2 trade ups that actually make money (scans every contract against steam prices every 5 min, only shows ones where every outcome sells for more than you paid after fees). the rest of the basement is for wasting time.
+
+## the basement
+
+- **wasd** walk, **shift** run, drag the mouse to look, **e** to use stuff, **i** inventory, **b** blyatlingo
+- **crt**: the trade up site. "в подвал" in the top bar brings you back down
+- **barrel**: arm wrestling. space / click when the arrow is in the green. 2 players on one keyboard = space vs enter
+- **card table**: durak (podkidnoy)
+- **chess table**: 5 guys from 400 to 2600 elo + a slider. the strong ones use stockfish from a cdn
+- **vending machine**: cases (real cs odds, real items, real steam prices), doshirak, kvas
+- **chalkboard**: start beef. slaps, boxing or (rubber) knives. tally stays on the board
+- **yard** (door by the stairs): hazmats scrap wheel + he buys skins for scrap, the daily airdrop, a chicken, the lada
+- at night (9pm-6am) the ghost runs a night market by the vending machine, and if you leave the guy alone he falls asleep on the couch. dont poke him too much
+- type **4b2a** and see what happens
+- holidays follow the real date (christmas is nov 25 - dec 28)
+- rubles + scrap + rank are saved in your browser
 
 ## setup
 
@@ -44,7 +59,7 @@ drop mp3s into `assets/voice/` named by when they play (`dubs_1.mp3`, `fail_1.mp
 ## good to know
 
 - github runs the 5 min schedule when it feels like it, sometimes 10-15 min. the site shows how old the scan is
-- steam only lets you pull so many prices at once so the scanner walks through the steam market a chunk at a time. skinport refreshes fully every run
+- steam only lets you pull so many prices at once so the scanner walks through the steam market a chunk at a time
 - floats arent in the free price data so it assumes the top of each wear (worst case). real floats are usually better
-- fees: steam takes ~13% (5% + 10%), skinport 8%
+- fees: steam takes ~13% (5% + 10%)
 - not financial advice, the market moves fast
