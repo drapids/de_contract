@@ -33,10 +33,16 @@
             <h2>sure things</h2>
             <p class="dim">every possible outcome sells for more than the inputs cost, after fees. buy fast, these die quick.</p>
           </div>
-          <div class="row">
-            <label class="chk"><input type="checkbox" id="g-st"> stattrak only</label>
-            <select id="g-tier" class="sel"><option value="">all tiers</option></select>
-          </div>
+        </div>
+        <div class="filters">
+          <label>tier <select id="g-tier" class="sel"><option value="">all</option></select></label>
+          <label class="chk"><input type="checkbox" id="g-st"> stattrak only</label>
+          <label>max cost $ <input id="g-cost" class="inp" type="number" min="0" placeholder="any"></label>
+          <label>min profit $ <input id="g-pmin" class="inp" type="number" step="0.5" placeholder="any"></label>
+          <label>max profit $ <input id="g-pmax" class="inp" type="number" step="0.5" placeholder="any"></label>
+          <label>min profit % <input id="g-pct" class="inp" type="number" step="1" placeholder="any"></label>
+          <label>sort <select id="g-sort" class="sel"><option value="pct">min profit %</option><option value="usd">min profit $</option><option value="ev">expected $</option><option value="cost">cheapest</option><option value="new">newest</option></select></label>
+          <label class="chk"><input type="checkbox" id="g-thin"> hide thin listings</label>
         </div>
         <div class="list" id="g-list"></div>
       </div>
@@ -48,7 +54,10 @@
           <label>max cost $ <input id="f-cost" class="inp" type="number" min="0" step="1" placeholder="any"></label>
           <label>min win % <input id="f-win" class="inp" type="number" min="0" max="100" step="5" value="0"></label>
           <label>min roi % <input id="f-roi" class="inp" type="number" step="5" placeholder="any"></label>
-          <label>sort <select id="f-sort" class="sel"><option value="roi">roi</option><option value="win">win chance</option><option value="ev">ev $</option><option value="cost">cheapest</option></select></label>
+          <label>min profit $ <input id="f-pmin" class="inp" type="number" step="0.5" placeholder="any"></label>
+          <label>max profit $ <input id="f-pmax" class="inp" type="number" step="0.5" placeholder="any"></label>
+          <label>max loss $ <input id="f-loss" class="inp" type="number" step="0.5" placeholder="any"></label>
+          <label>sort <select id="f-sort" class="sel"><option value="roi">roi</option><option value="profit">profit $ (ev)</option><option value="best">biggest hit</option><option value="win">win chance</option><option value="safe">smallest loss</option><option value="cost">cheapest</option></select></label>
           <label class="grow">search <input id="f-q" class="inp" placeholder="skin or collection"></label>
           <label class="chk"><input type="checkbox" id="f-thin"> hide thin listings</label>
         </div>

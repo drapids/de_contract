@@ -53,8 +53,15 @@ function tierOptions(sel) {
 }
 
 function renderGuaranteed() {
-  const st = $('#g-st').checked, tier = $('#g-tier').value;
-  const list = (S.data?.guaranteed || []).filter(t => (!st || t.st) && (!tier || t.tier == tier));
+  const st = $('#g-st').checked, tier = $('#g-tier').value, num = id => parseFloat($(id).value);
+  const cost = num('#g-cost'), pmin = num('#g-pmin'), pmax = num('#g-pmax'), pct = num('#g-pct'), thin = $('#g-thin').checked;
+  const list = (S.data?.guaranteed || []).filter(t => {
+    const p = t.worst - t.cost;
+    return (!st || t.st) && (!tier || t.tier == tier) && (isNaN(cost) || t.cost <= cost * 100) && (isNaN(pmin) || p >= pmin * 100) &&
+      (isNaN(pmax) || p <= pmax * 100) && (isNaN(pct) || p / t.cost * 100 >= pct) && (!thin || !t.thin);
+  });
+  const key = { pct: t => -(t.worst - t.cost) / t.cost, usd: t => -(t.worst - t.cost), ev: t => -(t.ev - t.cost), cost: t => t.cost, new: t => -(t.born || 0) }[$('#g-sort').value];
+  list.sort((a, b) => key(a) - key(b));
   $('#g-list').innerHTML = list.length ? head + list.map(row).join('') :
     `<div class="empty">nothing guaranteed right now.<br>check browse for the high win chance ones, or wait for the next scan.</div>`;
 }
@@ -62,12 +69,14 @@ function renderGuaranteed() {
 function renderBrowse() {
   const tier = $('#f-tier').value, st = $('#f-st').value, cost = parseFloat($('#f-cost').value), win = (parseFloat($('#f-win').value) || 0) / 100;
   const roi = parseFloat($('#f-roi').value), q = $('#f-q').value.trim().toLowerCase(), thin = $('#f-thin').checked, sort = $('#f-sort').value;
+  const pmin = parseFloat($('#f-pmin').value), pmax = parseFloat($('#f-pmax').value), loss = parseFloat($('#f-loss').value);
   const all = [...(S.data?.guaranteed || []), ...(S.data?.top || [])];
   let list = all.filter(t =>
     (!tier || t.tier == tier) && (st === '' || +t.st === +st) && (isNaN(cost) || t.cost <= cost * 100) &&
     t.win >= win && (isNaN(roi) || t.roi * 100 >= roi) && (!thin || !t.thin) &&
+    (isNaN(pmin) || t.ev - t.cost >= pmin * 100) && (isNaN(pmax) || t.ev - t.cost <= pmax * 100) && (isNaN(loss) || t.cost - t.worst <= loss * 100) &&
     (!q || t.in.some(i => i[0].toLowerCase().includes(q)) || t.outs.some(o => o[0].toLowerCase().includes(q))));
-  const key = { roi: t => -t.roi, win: t => -t.win, ev: t => -(t.ev - t.cost), cost: t => t.cost }[sort];
+  const key = { roi: t => -t.roi, win: t => -t.win, profit: t => -(t.ev - t.cost), best: t => -(t.best - t.cost), safe: t => t.cost - t.worst, cost: t => t.cost }[sort];
   list.sort((a, b) => key(a) - key(b));
   $('#b-list').innerHTML = list.length ? head + list.slice(0, 200).map(row).join('') + (list.length > 200 ? `<div class="dim">${list.length - 200} more, filter it down</div>` : '') : '<div class="empty">no trade ups match that</div>';
 }
@@ -355,8 +364,8 @@ async function load(manual) {
 function bind() {
   $('#tabs').onclick = e => { const b = e.target.closest('button'); if (b) tab(b.dataset.tab); };
   for (const id of ['#g-list', '#b-list']) $(id).onclick = e => { const r = e.target.closest('.tu'); if (r) openTrade(find(r.dataset.id)); };
-  $('#g-st').onchange = $('#g-tier').onchange = renderGuaranteed;
-  for (const id of ['#f-tier', '#f-st', '#f-cost', '#f-win', '#f-roi', '#f-sort', '#f-q', '#f-thin']) $(id).addEventListener('input', renderBrowse);
+  for (const id of ['#g-st', '#g-tier', '#g-cost', '#g-pmin', '#g-pmax', '#g-pct', '#g-sort', '#g-thin']) $(id).addEventListener('input', renderGuaranteed);
+  for (const id of ['#f-tier', '#f-st', '#f-cost', '#f-win', '#f-roi', '#f-sort', '#f-q', '#f-thin', '#f-pmin', '#f-pmax', '#f-loss']) $(id).addEventListener('input', renderBrowse);
   $('#m-close').onclick = closeModal;
   $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
