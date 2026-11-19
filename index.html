@@ -12,6 +12,7 @@
   <header class="bar">
     <div class="logo">de_contract<span class="ver">v1.0</span></div>
     <div class="status" id="status">loading...</div>
+    <label class="budget">budget $ <input class="inp" id="budget" type="number" min="0" step="1" placeholder="any"></label>
     <button class="btn" id="home" title="back to the basement">в подвал</button>
     <button class="btn" id="snd" title="music">&#9835;</button>
     <button class="btn" id="force">force scan</button>
@@ -26,6 +27,8 @@
         <button data-tab="calc">calculator</button>
         <button data-tab="inv">inventory</button>
         <button data-tab="tracker">tracker</button>
+        <button data-tab="caseev">case ev</button>
+        <button data-tab="alerts">alerts</button>
         <button data-tab="hollow" class="ghost">the hollow</button>
         <button data-tab="settings">settings</button>
       </nav>
@@ -118,6 +121,36 @@
         </div>
         <div class="totals" id="t-totals"></div>
         <div class="list" id="t-list"></div>
+      </div>
+
+      <div class="pane" id="tab-caseev">
+        <div class="pane-head">
+          <div>
+            <h2>case ev</h2>
+            <p class="dim">what a case is worth on average if you open it, using steam prices after fee. uses the real cs odds. missing prices get skipped.</p>
+          </div>
+          <div class="row">
+            <label>key $ <input class="inp" id="ev-key" type="number" step="0.01" value="2.49" style="width:70px"></label>
+            <label>case $ <input class="inp" id="ev-case" type="number" step="0.01" value="0.50" style="width:70px"></label>
+          </div>
+        </div>
+        <div id="ev-out" class="dim">waiting on scan data</div>
+      </div>
+
+      <div class="pane" id="tab-alerts">
+        <div class="pane-head">
+          <div>
+            <h2>price alerts</h2>
+            <p class="dim">pick a skin + the price you want to buy at. when the scan sees it at or under that, you get pinged (keep the tab open, allow notifications).</p>
+          </div>
+        </div>
+        <div class="row">
+          <input class="inp grow" id="al-q" list="al-list" placeholder="exact market name, ex. AK-47 | Redline (Field-Tested)">
+          <datalist id="al-list"></datalist>
+          <label>at or under $ <input class="inp" id="al-p" type="number" step="0.01" style="width:80px"></label>
+          <button class="btn go" id="al-add">add</button>
+        </div>
+        <div id="al-out"></div>
       </div>
 
       <div class="pane hollow" id="tab-hollow">

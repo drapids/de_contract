@@ -1,4 +1,5 @@
 import { Db, TIERS, TIER_COLORS, WEARS, wearsFor, wearSpan, hashName, outcomes, parseHash, usd, netAfterFee } from './tradeup.js';
+import { renderEv, renderAlerts, checkAlerts, lifeOf } from './extra.js';
 import { Guy } from './guy.js';
 import { setup as soundSetup, sfx, setMusic, setVolume, setTyping } from './sound.js';
 import { getLock, unlock, fetchData } from './lock.js';
@@ -37,7 +38,7 @@ function row(t) {
   const ins = t.in.map(i => chip(i[0], i[5], t.tier, `<b>${i[1]}x</b> `)).join('');
   const minP = (t.worst - t.cost) / t.cost;
   return `<div class="tu ${t.guaranteed ? 'sure' : ''}" data-id="${esc(t.id)}">
-    <div class="ins">${t.st ? '<span class="tag st">ST</span>' : ''}${t.born ? `<span class="tag age">${ago(t.born)}</span>` : ''}${ins}</div>
+    <div class="ins">${t.st ? '<span class="tag st">ST</span>' : ''}${t.born ? `<span class="tag age">${ago(t.born)}</span>` : ''}${clock(t)}${ins}</div>
     <div class="arrow">&rsaquo;</div>
     <div class="outs">${outs}</div>
     <div class="cell">${usd(t.cost)}<small>cost</small></div>
@@ -45,6 +46,12 @@ function row(t) {
     <div class="cell">${usd(t.ev)}<small>ev ${t.roi >= 0 ? '+' : ''}${pct(t.roi)}</small></div>
     <div class="cell ${t.win >= 0.5 ? 'ok' : ''}">${pct(t.win)}<small>win</small></div>
   </div>`;
+}
+
+function clock(t) {
+  if (!t.guaranteed || !t.born || !S.life) return '';
+  const left = S.life - (Date.now() - t.born);
+  return `<span class="tag clock ${left < 5 * 60000 ? 'soon' : ''}" title="these usually last about ${span(S.life)}">☠ ${left > 60000 ? '~' + span(left) : 'any sec'}</span>`;
 }
 
 const head = '<div class="listhead"><span>inputs</span><span></span><span>could get</span><span>cost</span><span>worst case</span><span>ev</span><span>chance</span></div>';
@@ -59,7 +66,7 @@ function renderGuaranteed() {
   const ok = t => {
     const p = t.worst - t.cost;
     return (!st || t.st) && (!tier || t.tier == tier) && (isNaN(cost) || t.cost <= cost * 100) && (isNaN(pmin) || p >= pmin * 100) &&
-      (isNaN(pmax) || p <= pmax * 100) && (isNaN(pct) || p / t.cost * 100 >= pct) && (!thin || !t.thin);
+      (isNaN(pmax) || p <= pmax * 100) && (isNaN(pct) || p / t.cost * 100 >= pct) && (!thin || !t.thin) && (!S.settings.budget || t.cost <= S.settings.budget * 100);
   };
   const list = (S.data?.guaranteed || []).filter(ok);
   const pend = (S.data?.pending || []).filter(ok);
@@ -75,7 +82,7 @@ function renderBrowse() {
   const tier = $('#f-tier').value, st = $('#f-st').value, cost = parseFloat($('#f-cost').value), win = (parseFloat($('#f-win').value) || 0) / 100;
   const roi = parseFloat($('#f-roi').value), q = $('#f-q').value.trim().toLowerCase(), thin = $('#f-thin').checked, sort = $('#f-sort').value;
   const pmin = parseFloat($('#f-pmin').value), pmax = parseFloat($('#f-pmax').value), loss = parseFloat($('#f-loss').value);
-  const all = [...(S.data?.guaranteed || []), ...(S.data?.top || [])];
+  const all = [...(S.data?.guaranteed || []), ...(S.data?.top || [])].filter(t => !S.settings.budget || t.cost <= S.settings.budget * 100);
   let list = all.filter(t =>
     (!tier || t.tier == tier) && (st === '' || +t.st === +st) && (isNaN(cost) || t.cost <= cost * 100) &&
     t.win >= win && (isNaN(roi) || t.roi * 100 >= roi) && (!thin || !t.thin) &&
@@ -103,7 +110,8 @@ function openTrade(t, quiet) {
   if (!quiet) sfx.equip();
   const minP = (t.worst - t.cost) / t.cost;
   $('#m-title').textContent = `${t.st ? 'StatTrak ' : ''}${TIERS[t.tier]} → ${t.tier === 5 ? 'knife/gloves' : TIERS[t.tier + 1]}`;
-  const ins = t.in.map(i => `<tr><td>${i[5] ? `<img src="${esc(i[5])}" alt="">` : ''}</td><td>${i[1]}x ${esc(i[0])}${i[4] < i[1] ? ' <span class="bad">(only ' + i[4] + ' listed)</span>' : ''}</td><td class="n">${usd(i[2])}</td><td><a href="${marketUrl(i[0], i[3])}" target="_blank" rel="noopener">${esc(i[3])}</a></td></tr>`).join('');
+  const shop = store.get('shop', {}), got = shop[t.id] || [];
+  const ins = t.in.map((i, n) => `<tr class="${got[n] ? 'bought' : ''}"><td class="shop-chk"><input type="checkbox" data-shop="${n}" ${got[n] ? 'checked' : ''} title="got these"></td><td>${i[5] ? `<img src="${esc(i[5])}" alt="">` : ''}</td><td>${i[1]}x ${esc(i[0])}${i[4] < i[1] ? ' <span class="bad">(only ' + i[4] + ' listed)</span>' : ''}</td><td class="n">${usd(i[2])}</td><td><a href="${marketUrl(i[0], i[3])}" target="_blank" rel="noopener">${esc(i[3])}</a></td></tr>`).join('');
   $('#m-body').innerHTML = `
     <div class="summary">
       <div class="stat"><small>total cost</small><b>${usd(t.cost)}</b></div>
@@ -113,7 +121,7 @@ function openTrade(t, quiet) {
       <div class="stat"><small>chance of profit</small><b>${pct(t.win)}</b></div>
       <div class="stat"><small>${t.guaranteed ? 'min profit' : 'roi'}</small><b class="${t.guaranteed ? 'ok' : t.roi >= 0 ? '' : 'bad'}">${t.guaranteed ? '+' + pct(minP) : pct(t.roi)}</b></div>
     </div>
-    <div class="box-t">buy these</div>
+    <div class="box-t">buy these <span class="shop-count">${got.filter(Boolean).length}/${t.in.length} bought</span></div>
     <table class="t">${ins}</table>
     <div class="note">floats are assumed near the top of each wear so this is the safe estimate. buy lower floats = better outcome wear. if you can, check floats on csfloat before buying.</div>
     <div class="box-t">possible outcomes</div>
@@ -127,6 +135,16 @@ function openTrade(t, quiet) {
       <button class="btn" id="m-copy">copy link</button>
     </div>`;
   $('#modal').hidden = false;
+  $('#m-body').querySelectorAll('[data-shop]').forEach(c => c.onchange = () => {
+    const sh = store.get('shop', {}), arr = sh[t.id] || [];
+    arr[+c.dataset.shop] = c.checked; sh[t.id] = arr;
+    const ids = Object.keys(sh); if (ids.length > 60) delete sh[ids[0]];
+    store.set('shop', sh);
+    c.closest('tr').classList.toggle('bought', c.checked);
+    const n = arr.filter(Boolean).length;
+    $('#m-body .shop-count').textContent = `${n}/${t.in.length} bought`;
+    if (n === t.in.length) { sfx.ok?.(); guy?.say('all bought. send it', 2200); }
+  });
   history.replaceState(null, '', '#t=' + encodeURIComponent(t.id));
   const best = [...t.outs].sort((a, b) => b[3] - a[3])[0];
   if (guy && !quiet) {
@@ -404,7 +422,9 @@ async function load(manual) {
     if (!d) throw new Error('no scan data yet');
     S.data = d; S.prices = pr?.prices || {}; S.hollow = ho?.hollow || [];
     if (sk) S.db = new Db(sk);
+    S.life = lifeOf(S.hollow);
     renderStatus(); renderGuaranteed(); renderBrowse(); renderHollow(); renderCalc();
+    renderEv(S); renderAlerts(S, store); checkAlerts(S, store, { guy, sfx });
     if (guy) {
       const fresh = d.guaranteed.filter(g => !S.seen?.has(g.id)).length;
       if (fresh && (manual || S.seen)) { guy.setDubs(`${fresh} new`); guy.set('dubs', 3500); }
@@ -431,6 +451,25 @@ function bind() {
   $('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
   $('#refresh').onclick = () => load(true);
+  $('#budget').value = S.settings.budget || '';
+  $('#budget').addEventListener('input', () => { S.settings.budget = parseFloat($('#budget').value) || 0; store.set('settings', S.settings); renderGuaranteed(); renderBrowse(); });
+  for (const id of ['#ev-key', '#ev-case']) $(id).addEventListener('input', () => renderEv(S));
+  $('#al-add').onclick = () => {
+    const h = $('#al-q').value.trim(), p = parseFloat($('#al-p').value);
+    if (!h || isNaN(p)) return;
+    const al = store.get('alerts', []).filter(a => a.h !== h);
+    al.push({ h, c: Math.round(p * 100), at: Date.now() });
+    store.set('alerts', al);
+    try { Notification.requestPermission?.(); } catch (e) {}
+    $('#al-q').value = ''; $('#al-p').value = '';
+    renderAlerts(S, store); checkAlerts(S, store, { guy, sfx });
+  };
+  $('#al-q').addEventListener('input', () => {
+    const q = $('#al-q').value.trim().toLowerCase();
+    if (q.length < 3) return;
+    $('#al-list').innerHTML = Object.keys(S.prices).filter(h => h.toLowerCase().includes(q)).slice(0, 30).map(h => `<option value="${esc(h)}">`).join('');
+  });
+  $('#al-out').onclick = e => { const d = e.target.dataset.del; if (d == null) return; store.set('alerts', store.get('alerts', []).filter(a => a.h !== d)); renderAlerts(S, store); };
   $('#force').onclick = forceScan;
   $('#snd').onclick = () => { S.settings.bg = !S.settings.bg; $('#s-bg').checked = S.settings.bg; store.set('settings', S.settings); setMusic(S.settings.bg); $('#snd').classList.toggle('off', !S.settings.bg); };
   window.addEventListener('dc:termlog', e => { const c = $('#cine-log'); c.insertAdjacentHTML('beforeend', `<div>${esc(e.detail)}</div>`); while (c.children.length > 6) c.firstChild.remove(); });
