@@ -72,7 +72,17 @@ export async function discord(hook, payload) {
   await fetch(hook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 }
 
+let sealKey = null;
 export async function previous(url) {
   if (!url) return null;
-  try { const r = await fetch(url, { headers: UA }); return r.ok ? r.json() : null; } catch { return null; }
+  try {
+    const r = await fetch(url, { headers: UA });
+    if (r.ok) return r.json();
+    if (!process.env.SITE_KEY) return null;
+    const e = await fetch(url + '.enc', { headers: UA });
+    if (!e.ok) return null;
+    const { deriveKey, open } = await import('../js/seal.js');
+    sealKey ||= await deriveKey(process.env.SITE_KEY);
+    return JSON.parse(new TextDecoder().decode(await open(sealKey, await e.arrayBuffer())));
+  } catch { return null; }
 }

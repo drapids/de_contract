@@ -38,7 +38,12 @@ jobs:
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STEAM_PAGES: 30
+          SITE_KEY: ${{ secrets.SITE_KEY }}
         run: node scanner/scan.mjs
+      - name: lock
+        env:
+          SITE_KEY: ${{ secrets.SITE_KEY }}
+        run: node scanner/seal-dist.mjs dist
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
