@@ -19,7 +19,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -37,7 +37,7 @@ jobs:
           OUT: dist/data
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          STEAM_PAGES: 20
+          STEAM_PAGES: 70
           VERIFY_MAX: 40
           SITE_KEY: ${{ secrets.SITE_KEY }}
         run: node scanner/scan.mjs

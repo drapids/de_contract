@@ -5,7 +5,8 @@ import { loadSkins, steamPages, steamOverview, discord, previous } from './sourc
 const OUT = process.env.OUT || 'dist/data';
 const SITE = process.env.SITE_URL || '';
 const HOOK = process.env.DISCORD_WEBHOOK || '';
-const STEAM_PAGES = +(process.env.STEAM_PAGES || 20);
+const STEAM_PAGES = +(process.env.STEAM_PAGES || 70);
+const STEAM_TTL = 36 * 3600e3;
 const VERIFY_MAX = +(process.env.VERIFY_MAX || 40);
 const VERIFY_TTL = 6 * 3600e3;
 const MIN_SELL_LISTINGS = 3;
@@ -28,9 +29,10 @@ const steamAge = prevState?.steamAge || {};
 const sp = await steamPages(prevState?.steamNext || 0, STEAM_PAGES);
 const now = Date.now();
 for (const [k, v] of Object.entries(sp.prices)) { steamCache[k] = [v.c, v.q]; steamAge[k] = now; }
-for (const k of Object.keys(steamAge)) if (now - steamAge[k] > 3 * 3600e3) { delete steamAge[k]; delete steamCache[k]; }
+for (const k of Object.keys(steamAge)) if (now - steamAge[k] > STEAM_TTL) { delete steamAge[k]; delete steamCache[k]; }
 sources.steam = Object.keys(steamCache).length;
 sources.steamFresh = Object.keys(sp.prices).length;
+sources.steamTotal = sp.total || 0;
 const rateLimited = sp.rate;
 sources.market = 'steam';
 log('steam', sources.steamFresh, 'fresh,', sources.steam, 'cached', rateLimited ? '(rate limited)' : '');

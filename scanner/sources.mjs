@@ -62,24 +62,32 @@ export async function steamOverview(names, delay = 3200, max = 40) {
   return { data: out, rate };
 }
 
-export async function steamPages(start, pages, delay = 3500) {
+const SEGMENTS = ['&category_730_Weapon%5B%5D=any', '&category_730_Type%5B%5D=tag_Type_Hands'];
+
+export async function steamPages(cursor, pages, delay = 3500) {
   const out = {};
-  let at = start, total = Infinity, rate = false;
+  let seg = typeof cursor === 'object' && cursor ? cursor.seg % SEGMENTS.length : 0;
+  let at = typeof cursor === 'object' && cursor ? cursor.at : 0;
+  let total = Infinity, rate = false, fails = 0, wrapped = false;
+  const totals = (cursor && cursor.totals) || {};
   for (let i = 0; i < pages; i++) {
     try {
-      const j = await getJson(`https://steamcommunity.com/market/search/render/?query=&start=${at}&count=100&search_descriptions=0&sort_column=name&sort_dir=asc&appid=730&norender=1`);
+      const j = await getJson(`https://steamcommunity.com/market/search/render/?query=&start=${at}&count=100&search_descriptions=0&sort_column=name&sort_dir=asc&appid=730&norender=1${SEGMENTS[seg]}`);
+      if (!j || j.success === false) throw new Error('steam said no');
       total = j.total_count ?? total;
+      totals[seg] = total;
       for (const r of j.results || []) if (r.sell_price) out[r.hash_name] = { c: r.sell_price, q: r.sell_listings || 0 };
       at += 100;
-      if (at >= total) { at = 0; break; }
+      fails = 0;
+      if (at >= total) { at = 0; seg = (seg + 1) % SEGMENTS.length; if (seg === 0) wrapped = true; }
       if (process.env.FIXTURES) break;
     } catch (e) {
       if (e.rate) { rate = true; break; }
-      throw e;
+      if (++fails >= 3) break;
     }
-    await sleep(delay);
+    await sleep(delay * (fails ? 2 : 1));
   }
-  return { prices: out, next: at, total, rate };
+  return { prices: out, next: { seg, at, totals }, total: Object.values(totals).reduce((a, b) => a + b, 0), rate, wrapped };
 }
 
 export async function discord(hook, payload) {
