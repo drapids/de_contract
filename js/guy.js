@@ -40,6 +40,12 @@ const Q = {
       a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
   },
   conj(q) { return [-q[0], -q[1], -q[2], q[3]]; },
+  nlerp(a, b, t) {
+    const d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3], s = d < 0 ? -1 : 1;
+    const o = [0, 1, 2, 3].map(i => a[i] * (1 - t) + b[i] * s * t);
+    const l = Math.hypot(...o);
+    return o.map(v => v / l);
+  },
   euler(d) {
     const r = Math.PI / 180;
     return Q.mul(Q.axis([0, 1, 0], d[1] * r), Q.mul(Q.axis([1, 0, 0], d[0] * r), Q.axis([0, 0, 1], d[2] * r)));
@@ -175,7 +181,8 @@ export class Guy {
 
   async load() {
     const gl = this.gl;
-    const data = await (await fetch(this.base + 'guy.json')).json();
+    const [data, clips] = await Promise.all([fetch(this.base + 'guy.json').then(r => r.json()), fetch(this.base + 'anims.json').then(r => r.json()).catch(() => ({}))]);
+    this.clips = clips;
     this.bones = data.bones.map(b => ({ name: b.name, parent: b.parent, local: new Float32Array(b.local), inv: new Float32Array(b.invBind) }));
     this.byName = {};
     this.bones.forEach((b, i) => this.byName[b.name] = i);
@@ -350,7 +357,34 @@ export class Guy {
     this.fx.width = Math.round(r.width / 2); this.fx.height = Math.round(r.height / 2);
   }
 
+  clip(name, t, loop = true, fps = this.fps || 30) {
+    const c = this.clips[name];
+    if (!c) return { p: {}, root: [0, 0, 0] };
+    let f = t * 30;
+    f = loop ? f % (c.n - 1) : Math.min(f, c.n - 1);
+    if (fps < 30) f = Math.floor(f / (30 / fps)) * (30 / fps);
+    const a = Math.floor(f), b = Math.min(a + 1, c.n - 1), u = f - a;
+    const p = {};
+    for (const k in c.b) {
+      const v = c.b[k];
+      p[k] = Q.nlerp(v.slice(a * 4, a * 4 + 4), v.slice(b * 4, b * 4 + 4), u);
+    }
+    const r = c.r, H = 0.85;
+    const root = [0, 1, 2].map(i => (r[a * 3 + i] * (1 - u) + r[b * 3 + i] * u) * H);
+    return { p, root, len: c.d };
+  }
+
+  look2(p, k = 1) {
+    const lk = this.look;
+    if (p.head) p.head = Q.mul(Q.euler([lk[1] * 14 * k, lk[0] * 30 * k, 0]), p.head.length === 4 ? p.head : Q.euler(p.head));
+    return p;
+  }
+
   pose(state, t) {
+    if (state.startsWith('clip:')) {
+      const c = this.clip(state.slice(5), t, !this.once);
+      return { p: this.look2(c.p, 0.5), root: c.root, turn: -18 };
+    }
     const lk = this.look;
     const breathe = wave(t, 0.28) * 1.6;
     const sway = wave(t, 0.11) * 2;
@@ -469,12 +503,13 @@ export class Guy {
     const st = now - (this.stateStart || this.t0);
     const timeFor = s => (s === 'idle' || s === 'loading' || s === 'hold') ? now - this.t0 : st;
     let cur = this.pose(this.state, timeFor(this.state));
+    const toQ = o => { const p = {}; for (const n in o.p) p[n] = o.p[n].length === 4 ? o.p[n] : Q.euler(o.p[n]); return { ...o, p }; };
+    cur = toQ(cur);
     if (this.blend < 1 && this.prev) {
-      const old = this.pose(this.prev, this.prev === this.state ? st : (now - this.t0));
+      const old = toQ(this.pose(this.prev, this.prev === this.state ? st : (now - this.t0)));
       const k = ease(this.blend), p = {};
       for (const n of new Set([...Object.keys(old.p), ...Object.keys(cur.p)])) {
-        const a = old.p[n] || [0, 0, 0], b = cur.p[n] || [0, 0, 0];
-        p[n] = [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+        p[n] = Q.nlerp(old.p[n] || [0, 0, 0, 1], cur.p[n] || [0, 0, 0, 1], k);
       }
       cur = { p, root: cur.root.map((v, i) => lerp(old.root[i], v, k)), turn: lerp(old.turn, cur.turn, k) };
     }
@@ -492,7 +527,7 @@ export class Guy {
       let L = b.local;
       const e = cur.p[b.name];
       if (e) {
-        const q = Q.euler(e);
+        const q = e.length === 4 ? e : Q.euler(e);
         const rq = this.restQ[i];
         const lq = Q.mul(Q.conj(rq), Q.mul(q, rq));
         L = M4.mul(L, M4.fromQT(lq, [0, 0, 0]));
