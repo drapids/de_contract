@@ -517,3 +517,24 @@ tr.bought td { opacity: .45; text-decoration: line-through; }
 .comeback.boom { animation: cbboom .45s forwards; }
 @keyframes cbboom { 0% { transform: scale(1); } 30% { transform: scale(1.6) rotate(8deg); background: #fff; } 100% { transform: scale(2.4) rotate(-20deg); opacity: 0; } }
 body.dragging-guy, body.dragging-guy * { cursor: url(../assets/ui/cur_aim.png) 15 15, grabbing !important; user-select: none; }
+
+.calc .box { background: linear-gradient(#3a4234, #333a2d); }
+#c-inputs { display: grid; grid-template-columns: 1fr; gap: 4px; max-height: calc(100vh - 290px); overflow: auto; padding-right: 2px; }
+.cin { display: grid; grid-template-columns: 54px 1fr 58px 70px 46px 18px; gap: 6px; align-items: center; background: var(--panel2); border: 1px solid var(--lo); border-left: 4px solid var(--c, var(--lo)); padding: 3px 5px; }
+.cin img, .cin > i { width: 54px; height: 38px; object-fit: contain; background: radial-gradient(rgba(255,255,255,.07), transparent 70%); }
+.cin > span { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cin .inp, .cin .sel { width: 100%; }
+.cin .x { background: none; border: none; color: var(--red); cursor: pointer; font-weight: bold; }
+.cin.empty { display: flex; align-items: center; justify-content: center; height: 46px; border: 1px dashed #5d6653; border-left: 1px dashed #5d6653; background: transparent; color: #5d6653; font: bold 16px Verdana, sans-serif; }
+.couts { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.cout { display: grid; grid-template-columns: 64px 1fr auto; gap: 8px; align-items: center; background: var(--panel2); border: 1px solid var(--lo); border-left: 4px solid var(--c); padding: 4px 8px 4px 4px; }
+.cout img, .cout > i { width: 64px; height: 44px; object-fit: contain; }
+.cout b { font-weight: normal; display: block; font-size: 12px; }
+.cout small { color: var(--dim); font-size: 10px; }
+.cout .odds { display: block; height: 4px; background: #23271e; margin-top: 3px; }
+.cout .odds s { display: block; height: 100%; background: var(--c); }
+.cout em { font-style: normal; text-align: right; color: var(--dim); font-size: 11px; }
+.cout em b { font-size: 13px; color: var(--text); }
+.cout.pos em b { color: var(--green); }
+.cout.neg em b { color: var(--red); }
+#c-out .summary { grid-template-columns: repeat(4, 1fr); }

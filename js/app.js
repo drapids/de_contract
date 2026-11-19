@@ -303,12 +303,12 @@ function renderCalc() {
   $('#c-inputs').innerHTML = C.rows.map((r, i) => {
     const ws = wearsFor(r.skin).map(w => `<option value="${w}" ${w === r.wi ? 'selected' : ''}>${WEARS[w][1]}</option>`).join('');
     const p = S.prices[hashName(r.skin, r.wi, C.st)];
-    return `<div class="cin" data-i="${i}"><span title="${esc(r.skin.n)}">${esc(r.skin.n)}<br><small class="dim">${p ? usd(p[0]) + ' ' + p[1] : 'no price'}</small></span>
+    return `<div class="cin" data-i="${i}" style="--c:${TIER_COLORS[r.skin.r]}">${r.skin.img ? `<img src="${esc(r.skin.img)}" alt="">` : '<i></i>'}<span title="${esc(r.skin.n)}">${esc(r.skin.n)}<br><small class="dim">${p ? usd(p[0]) + ' ' + p[1] : 'no price'}</small></span>
       <select class="sel" data-k="wi">${ws}</select>
       <input class="inp" data-k="f" type="number" step="0.001" value="${r.f}">
       <input class="inp" data-k="k" type="number" min="1" max="${need}" value="${r.k}">
       <button class="x" data-k="del">x</button></div>`;
-  }).join('') || '<div class="dim">nothing yet</div>';
+  }).join('') + Array(Math.max(0, need - count)).fill(0).map((_, i) => `<div class="cin empty">${count + i + 1}</div>`).slice(0, 10).join('');
   if (count !== need || !C.rows.length) { $('#c-out').innerHTML = `<span class="dim">need exactly ${need} (have ${count})</span>`; return; }
   const ins = C.rows.flatMap(r => Array(r.k).fill({ skin: r.skin, float: r.f }));
   const outs = outcomes(S.db, ins, C.st);
@@ -321,7 +321,7 @@ function renderCalc() {
       <div class="stat"><small>cost</small><b>${usd(cost)}</b></div><div class="stat"><small>ev</small><b>${usd(Math.round(ev))}</b></div>
       <div class="stat"><small>worst</small><b class="${worst > cost ? 'ok' : 'bad'}">${usd(worst)}</b></div><div class="stat"><small>win</small><b>${pct(win)}</b></div></div>
     ${miss ? '<div class="note">missing prices for some inputs</div>' : ''}
-    <table class="t"><tr><th>outcome</th><th class="n">odds</th><th class="n">float</th><th class="n">net</th></tr>${outs.map(o => `<tr class="${o.net > cost ? 'pos' : 'neg'}"><td>${esc(o.hash)}</td><td class="n">${pct(o.p)}</td><td class="n">${o.float.toFixed(4)}</td><td class="n">${o.net ? usd(o.net) : '?'}</td></tr>`).join('')}</table>`;
+    <div class="couts">${outs.map(o => { const sk = S.db.byName.get(parseHash(o.hash).name); return `<div class="cout ${o.net > cost ? 'pos' : 'neg'}" style="--c:${TIER_COLORS[sk?.r ?? 0]}">${sk?.img ? `<img src="${esc(sk.img)}" alt="">` : '<i></i>'}<div><b>${esc(short(o.hash))}</b><small>float ${o.float.toFixed(4)}</small><span class="odds"><s style="width:${(o.p * 100).toFixed(1)}%"></s></span></div><em>${pct(o.p)}<br><b>${o.net ? usd(o.net) : '?'}</b></em></div>`; }).join('')}</div>`;
 }
 
 function addCalc(skin, wi, k = 1) {
