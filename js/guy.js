@@ -156,6 +156,8 @@ export class Guy {
     host.append(this.canvas, this.fx, this.bubble);
     this.gl = this.canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: false });
     this.state = 'idle';
+    this.fps = opts.fps ?? 15;
+    this.damp = opts.damp ?? 0.65;
     this.prev = null;
     this.blend = 1;
     this.t0 = performance.now() / 1000;
@@ -183,6 +185,15 @@ export class Guy {
     const gl = this.gl;
     const [data, clips] = await Promise.all([fetch(this.base + 'guy.json').then(r => r.json()), fetch(this.base + 'anims.json').then(r => r.json()).catch(() => ({}))]);
     this.clips = clips;
+    for (const c of Object.values(clips)) {
+      c.mean = {};
+      for (const k in c.b) {
+        const v = c.b[k], m = [0, 0, 0, 0], ref = v.slice(0, 4);
+        for (let f = 0; f < c.n; f++) { const q = v.slice(f * 4, f * 4 + 4), sg = q[0] * ref[0] + q[1] * ref[1] + q[2] * ref[2] + q[3] * ref[3] < 0 ? -1 : 1; for (let i = 0; i < 4; i++) m[i] += q[i] * sg; }
+        const l = Math.hypot(...m); c.mean[k] = m.map(x => x / l);
+      }
+      c.rmean = [0, 1, 2].map(i => { let a = 0; for (let f = 0; f < c.n; f++) a += c.r[f * 3 + i]; return a / c.n; });
+    }
     this.bones = data.bones.map(b => ({ name: b.name, parent: b.parent, local: new Float32Array(b.local), inv: new Float32Array(b.invBind) }));
     this.byName = {};
     this.bones.forEach((b, i) => this.byName[b.name] = i);
@@ -357,20 +368,21 @@ export class Guy {
     this.fx.width = Math.round(r.width / 2); this.fx.height = Math.round(r.height / 2);
   }
 
-  clip(name, t, loop = true, fps = this.fps || 30) {
+  clip(name, t, loop = true) {
     const c = this.clips[name];
     if (!c) return { p: {}, root: [0, 0, 0] };
     let f = t * 30;
     f = loop ? f % (c.n - 1) : Math.min(f, c.n - 1);
-    if (fps < 30) f = Math.floor(f / (30 / fps)) * (30 / fps);
     const a = Math.floor(f), b = Math.min(a + 1, c.n - 1), u = f - a;
+    const damp = loop ? this.damp : 1;
     const p = {};
     for (const k in c.b) {
       const v = c.b[k];
-      p[k] = Q.nlerp(v.slice(a * 4, a * 4 + 4), v.slice(b * 4, b * 4 + 4), u);
+      const q = Q.nlerp(v.slice(a * 4, a * 4 + 4), v.slice(b * 4, b * 4 + 4), u);
+      p[k] = damp < 1 ? Q.nlerp(c.mean[k], q, damp) : q;
     }
     const r = c.r, H = 0.85;
-    const root = [0, 1, 2].map(i => (r[a * 3 + i] * (1 - u) + r[b * 3 + i] * u) * H);
+    const root = [0, 1, 2].map(i => { const v = r[a * 3 + i] * (1 - u) + r[b * 3 + i] * u; return (c.rmean[i] + (v - c.rmean[i]) * damp) * H; });
     return { p, root, len: c.d };
   }
 
@@ -497,10 +509,11 @@ export class Guy {
     now /= 1000;
     const dt = Math.min(0.05, now - (this.last || now));
     this.last = now;
+    if (this.fps) now = Math.floor(now * this.fps) / this.fps;
     this.look[0] += (this.lookT[0] - this.look[0]) * Math.min(1, dt * 6);
     this.look[1] += (this.lookT[1] - this.look[1]) * Math.min(1, dt * 6);
     this.blend = Math.min(1, this.blend + dt / 0.3);
-    const st = now - (this.stateStart || this.t0);
+    const st = Math.max(0, now - (this.stateStart || this.t0));
     const timeFor = s => (s === 'idle' || s === 'loading' || s === 'hold') ? now - this.t0 : st;
     let cur = this.pose(this.state, timeFor(this.state));
     const toQ = o => { const p = {}; for (const n in o.p) p[n] = o.p[n].length === 4 ? o.p[n] : Q.euler(o.p[n]); return { ...o, p }; };
