@@ -212,3 +212,14 @@ table.t tr.neg td:first-child { box-shadow: inset 2px 0 0 var(--red); }
   .calc { grid-template-columns: 1fr; }
   .totals { grid-template-columns: 1fr 1fr; }
 }
+
+.rl-box {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 3;
+  display: none; align-items: center; gap: 8px; padding: 6px 8px;
+  background: rgba(30, 34, 26, .9); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi);
+}
+.rl-box.on { display: flex; }
+.rl-box b { color: var(--red); white-space: nowrap; }
+.rl-count { flex: 1; color: var(--dim); font-size: 11px; }
+.rl-music { position: fixed; width: 2px; height: 2px; right: 0; bottom: 0; border: 0; opacity: .01; pointer-events: none; }
+.yard .empty { grid-column: 1 / -1; }
