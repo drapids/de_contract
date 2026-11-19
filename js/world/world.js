@@ -3,6 +3,7 @@ import { Avatar } from './avatar.js';
 import { T, paint } from './tex.js';
 import { Arm } from './arm.js';
 import { Durak } from './durak.js';
+import { Chess } from './chess.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -44,6 +45,7 @@ export class World {
     this.bind();
     this.arm = new Arm(this);
     this.durak = new Durak(this);
+    this.chess = new Chess(this);
     this.ready = this.load();
   }
 
@@ -87,6 +89,7 @@ export class World {
     this.screenT = e.texCanvas(this.screenC);
     await this.av.load(this.opts.skin || 'sas');
     await Promise.all([this.buildBasement(), this.buildYard()]);
+    this.chess.build();
     this.go('basement', true);
   }
 
@@ -157,9 +160,11 @@ export class World {
     sc.acts.push({ p: [1.6, 0.8, 1.0], r: 1.3, label: 'дурак', act: () => this.game('durak') });
 
     this.shape(sc, merge(boxG(0.7, 0.06, 0.7, -1.8, 0.7, 1.6), boxG(0.5, 0.68, 0.5, -1.8, 0.34, 1.6)), t.rust);
-    this.solid(sc, -2.15, 1.25, -1.45, 1.95, 0.8);
-    const cb2 = paint(64, 64, x => { for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) { x.fillStyle = (r + c) % 2 ? '#3b2a1c' : '#bfae8a'; x.fillRect(c * 8, r * 8, 8, 8); } x.fillStyle = 'rgba(40,30,10,.35)'; x.fillRect(10, 30, 30, 12); });
-    this.shape(sc, boxG(0.46, 0.012, 0.46, -1.8, 0.736, 1.6), this.e.texCanvas(cb2));
+    this.solid(sc, -2.15, 0.58, -1.45, 2.62, 0.8);
+    this.chessTable = [-1.8, 0.732, 1.6];
+    this.shape(sc, boxG(0.008, 0.62, 0.008, -1.8, 2.29, 1.6), t.pipe);
+    sc.items.push({ obj: this.e.shape(boxG(0.06, 0.08, 0.06, -1.8, 1.95, 1.6), null, [1, 0.85, 0.55, 1]), m: M4.id(), o: { unlit: 1 } });
+    this.shape(sc, merge(boxG(0.34, 0.42, 0.34, -1.8, 0.21, 0.75), boxG(0.34, 0.42, 0.34, -1.8, 0.21, 2.45)), t.wood);
     sc.acts.push({ p: [-1.8, 0.8, 1.6], r: 1.2, label: 'шахматы', act: () => this.game('chess') });
 
     const B = this.barrel = [-0.4, 0, 1.75];
@@ -178,7 +183,8 @@ export class World {
       { pos: [0, 2.35, -0.2], color: [1.0, 0.95, 0.82], r: 7.5, k: this.flick.k * 1.15 },
       { pos: [-3.3, 1.05, -2.0], color: [0.35, 0.75, 0.55], r: 2.2, k: 0.7 + Math.sin(now * 13) * 0.05 },
       { pos: [3.0, 1.2, -1.7], color: [0.9, 0.85, 0.7], r: 2.4, k: 0.8 },
-      { pos: [-3.6, 2.0, 0.3], color: night ? [0.2, 0.25, 0.45] : [0.7, 0.75, 0.8], r: 3.2, k: night ? 0.5 : 0.9 }
+      { pos: [-3.6, 2.0, 0.3], color: night ? [0.2, 0.25, 0.45] : [0.7, 0.75, 0.8], r: 3.2, k: night ? 0.5 : 0.9 },
+      { pos: [-1.8, 1.75, 1.6], color: [1.0, 0.8, 0.5], r: 1.9, k: 0.9 + Math.sin(now * 3.1) * 0.04 }
     ];
   }
 
@@ -309,6 +315,7 @@ export class World {
 
   game(kind) {
     if (kind === 'durak') return this.durak.open();
+    if (kind === 'chess') return this.chess.open();
     if (this.opts.onGame?.(kind)) return;
     this.say({ durak: 'карты есть, соперников нет. скоро', chess: 'доска грязная, фигуры потерялись. скоро', arm: 'никто не хочет со мной бороться. скоро' }[kind]);
   }
@@ -361,6 +368,14 @@ export class World {
       return;
     }
     this.afterPos = 0;
+    if (this.chessOn) {
+      const T = this.chessTable;
+      av.update(dt); if (this.chess.g) this.chess.foe.update(dt);
+      this.chess.update(dt);
+      av.pos = [T[0], 0, T[2] - 0.85]; av.yaw = 0;
+      this.chess.foe.pos = [T[0], 0, T[2] + 0.85]; this.chess.foe.yaw = Math.PI;
+      return;
+    }
     if (this.durakOn) {
       const T = this.cardTable;
       av.update(dt); if (this.durak.g) this.durak.foe.update(dt);
@@ -406,6 +421,10 @@ export class World {
     if (this.match) {
       const C = this.barrel, sh = this.arm.m?.shake > 0 ? (Math.random() - 0.5) * 0.03 : 0;
       return M4.mul(M4.persp(1.0, asp0, 0.05, 60), M4.look([C[0] + 0.55 + sh, 1.75, C[2] - 1.5], [C[0], 1.12, C[2]], [0, 1, 0]));
+    }
+    if (this.chessOn) {
+      const T = this.chessTable;
+      return M4.mul(M4.persp(1.0, asp0, 0.05, 60), M4.look([T[0], 1.3, T[2] - 0.5], [T[0], 0.72, T[2] + 0.06], [0, 1, 0]));
     }
     if (this.durakOn) {
       const T = this.cardTable;
@@ -475,7 +494,9 @@ export class World {
       e.draw(it.obj, it.m, o);
     }
     if (this.windowQ) this.windowQ.groups[0].tint = night ? [0.12, 0.15, 0.3, 1] : [0.75, 0.82, 0.9, 1];
-    this.av.draw();
+    if (!this.chessOn) this.av.draw();
+    if (sc === this.scenes.basement) this.chess.draw();
+    if (this.chessOn && this.chess.g) this.chess.foe.draw();
     if (this.match) this.arm.foe.draw();
     if (this.durakOn && this.durak.g) this.durak.foe.draw();
     this.interact();

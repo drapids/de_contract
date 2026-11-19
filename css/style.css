@@ -352,3 +352,20 @@ body .world-ui:has(.arm-hud:not([hidden])) .w-hint { display: none; }
 @keyframes scamflash { 50% { background: linear-gradient(#f80, #ff0); } }
 @keyframes scampulse { to { transform: scale(1.08); } }
 body .world-ui:has(.dk-table:not([hidden])) .w-hint, body .world-ui:has(.dk-pick:not([hidden])) .w-hint, body .world-ui:has(.arm-pick:not([hidden])) .w-hint { display: none; }
+
+.chess { position: absolute; inset: 0; pointer-events: none; }
+.chess [hidden], .chess[hidden] { display: none !important; }
+.ch-pick { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 340px; pointer-events: auto; background: var(--panel); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); box-shadow: 4px 4px 0 rgba(0,0,0,.5); }
+.ch-list { display: flex; flex-direction: column; gap: 4px; padding: 8px 8px 4px; }
+.arm-foe .elo { font-size: 11px; letter-spacing: 0; color: var(--gold); }
+.ch-custom { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 4px 8px 8px; }
+.ch-custom input { width: 120px; vertical-align: middle; }
+.ch-hud { position: absolute; right: 12px; top: 12px; width: 190px; pointer-events: auto; background: rgba(40,46,34,.88); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); padding: 8px; }
+.ch-who { display: flex; justify-content: space-between; align-items: baseline; }
+.ch-who span { color: var(--gold); font-size: 11px; }
+.ch-moves { margin: 6px 0; height: 160px; overflow: auto; white-space: pre; font: 11px "Courier New", monospace; background: var(--panel2); border: 1px solid; border-color: var(--lo) var(--hi) var(--hi) var(--lo); padding: 4px; }
+.ch-st { min-height: 16px; color: var(--gold); }
+.ch-btns { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.ch-btns .btn { padding: 2px 6px; }
+.ch-big { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-3deg); font: bold 50px Impact, Verdana, sans-serif; color: #f2e9c0; text-shadow: 4px 4px 0 #000; white-space: nowrap; }
+body .world-ui:has(.ch-hud:not([hidden])) .w-hint, body .world-ui:has(.ch-pick:not([hidden])) .w-hint { display: none; }
