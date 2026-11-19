@@ -1,6 +1,6 @@
 import { Db, TIERS, TIER_COLORS, WEARS, wearsFor, wearSpan, hashName, outcomes, parseHash, usd, netAfterFee } from './tradeup.js';
 import { Guy } from './guy.js';
-import { setup as soundSetup, sfx, setMusic, setVolume } from './sound.js';
+import { setup as soundSetup, sfx, setMusic, setVolume, setTyping } from './sound.js';
 import { getLock, unlock, fetchData } from './lock.js';
 
 const $ = s => document.querySelector(s);
@@ -18,7 +18,7 @@ const store = {
 
 const S = {
   data: null, db: null, prices: {}, hollow: [],
-  settings: { worker: '', guy: true, music: true, bg: true, vol: 0.5, skin: 'sas', ...store.get('settings', {}) },
+  settings: { worker: '', guy: true, music: true, bg: true, vol: 0.5, skin: 'sas', typing: true, typVol: 0.5, ...store.get('settings', {}) },
   tracker: store.get('tracker', []),
   calc: { st: false, rows: [] }
 };
@@ -100,6 +100,7 @@ function outTable(t, live) {
 
 function openTrade(t, quiet) {
   if (!t) return;
+  if (!quiet) sfx.equip();
   const minP = (t.worst - t.cost) / t.cost;
   $('#m-title').textContent = `${t.st ? 'StatTrak ' : ''}${TIERS[t.tier]} → ${t.tier === 5 ? 'knife/gloves' : TIERS[t.tier + 1]}`;
   const ins = t.in.map(i => `<tr><td>${i[5] ? `<img src="${esc(i[5])}" alt="">` : ''}</td><td>${i[1]}x ${esc(i[0])}${i[4] < i[1] ? ' <span class="bad">(only ' + i[4] + ' listed)</span>' : ''}</td><td class="n">${usd(i[2])}</td><td><a href="${marketUrl(i[0], i[3])}" target="_blank" rel="noopener">${esc(i[3])}</a></td></tr>`).join('');
@@ -231,7 +232,8 @@ function logTrade(t) {
     store.set('tracker', S.tracker);
     renderTracker(); renderHollow();
     closeModal();
-    guy?.push();
+    sfx.bought();
+    if (guy) { guy.set('dance', 4200); }
     if (e.value < e.cost) setTimeout(() => guy?.say('rip. thats going in the hollow', 2500), 600);
   };
 }
@@ -471,17 +473,18 @@ function bind() {
 
   const st = S.settings;
   $('#s-worker').value = st.worker; $('#s-guy').checked = st.guy; $('#s-music').checked = st.music;
-  $('#s-skin').value = st.skin; $('#s-vol').value = st.vol; $('#s-bg').checked = st.bg;
+  $('#s-skin').value = st.skin; $('#s-vol').value = st.vol; $('#s-bg').checked = st.bg; $('#s-typ').checked = st.typing; $('#s-typvol').value = st.typVol;
   $('#snd').classList.toggle('off', !st.bg);
   const save = () => {
     const old = S.settings.skin;
-    S.settings = { worker: $('#s-worker').value.trim(), guy: $('#s-guy').checked, music: $('#s-music').checked, skin: $('#s-skin').value, vol: +$('#s-vol').value, bg: $('#s-bg').checked };
+    S.settings = { worker: $('#s-worker').value.trim(), guy: $('#s-guy').checked, music: $('#s-music').checked, skin: $('#s-skin').value, vol: +$('#s-vol').value, bg: $('#s-bg').checked, typing: $('#s-typ').checked, typVol: +$('#s-typvol').value };
+    setTyping(S.settings.typing, S.settings.typVol);
     store.set('settings', S.settings);
     $('#guy').hidden = !S.settings.guy; document.body.classList.toggle('noguy', !S.settings.guy);
     setVolume(S.settings.vol); setMusic(S.settings.bg); $('#snd').classList.toggle('off', !S.settings.bg);
     if (old !== S.settings.skin) { applySkin(); world?.setSkin(S.settings.skin || 'sas').catch(() => {}); }
   };
-  for (const id of ['#s-worker', '#s-guy', '#s-music', '#s-skin', '#s-vol', '#s-bg']) $(id).addEventListener('change', save);
+  for (const id of ['#s-worker', '#s-guy', '#s-music', '#s-skin', '#s-vol', '#s-bg', '#s-typ', '#s-typvol']) $(id).addEventListener('change', save);
   $('#s-scene').onclick = () => window.dispatchEvent(new CustomEvent('dc:ratelimit', { detail: { retry: 30, manual: true } }));
   $('#guy').hidden = !st.guy;
   document.body.classList.toggle('noguy', !st.guy);
@@ -491,8 +494,8 @@ tierOptions($('#g-tier'));
 tierOptions($('#f-tier'));
 bind();
 renderTracker();
-soundSetup('assets/', { music: S.settings.bg, volume: S.settings.vol });
-const onEvent = e => { if (sfx[e]) sfx[e](); else sfx.voice(e); };
+soundSetup('assets/', { music: S.settings.bg, volume: S.settings.vol, typing: S.settings.typing, typVol: S.settings.typVol });
+const onEvent = e => { if (e === 'key') { sfx.typing(); return; } if (sfx[e]) sfx[e](); else sfx.voice(e); };
 async function applySkin() {
   if (!guy) return;
   const sk = S.settings.skin || 'sas';
