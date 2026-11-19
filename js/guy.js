@@ -1323,7 +1323,6 @@ export class Guy {
     if (this.flashes?.length) {
       this.flashes = this.flashes.filter(f => (f.life -= dt) > 0);
       for (const f of this.flashes) {
-        x.strokeStyle = '#fff3b0'; x.lineWidth = 2; x.beginPath(); x.moveTo(f.a[0], f.a[1]); x.lineTo(f.b[0], f.b[1]); x.stroke();
         x.fillStyle = '#ffd35a'; x.beginPath(); x.arc(f.a[0], f.a[1], 7, 0, 7); x.fill();
         x.fillStyle = '#fff'; x.beginPath(); x.arc(f.a[0], f.a[1], 3, 0, 7); x.fill();
       }
