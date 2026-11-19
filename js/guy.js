@@ -163,6 +163,7 @@ const CFG = {
   roll: { clip: 'Roll', once: true, next: 'idle', turn: -80 },
   pickup: { clip: 'PickUp_Table', once: true, next: 'hold' },
   dance: { clip: 'Dance_Loop', look: 0.2 },
+  bounce: { clip: 'Billy_Bounce', look: 0, plant: true },
   yes: { clip: 'Yes', once: true, next: 'idle' }
 };
 
@@ -476,14 +477,14 @@ export class Guy {
   pose(state, t) {
     if (state.startsWith('clip:')) {
       const c = this.clip(state.slice(5), t, !this.once);
-      return { p: this.look2(c.p, 0.5), root: c.root, turn: -18 };
+      return { p: this.look2(c.p, 0.5), root: c.root, turn: -18, plant: state === 'clip:Billy_Bounce' };
     }
     const cf = CFG[state];
     if (cf && this.clips[cf.clip]) {
       const c = this.clip(cf.clip, t, !cf.once);
       const root = c.root.slice();
       if (cf.move) root[2] += cf.move[0] + cf.move[1] * t;
-      return { p: this.look2(c.p, cf.look ?? 0), root, turn: cf.turn ?? -18 };
+      return { p: this.look2(c.p, cf.look ?? 0), root, turn: cf.turn ?? -18, plant: cf.plant };
     }
     if (state === 'watch') state = 'loading_proc';
     const lk = this.look;
@@ -598,7 +599,7 @@ export class Guy {
       for (const n of new Set([...Object.keys(old.p), ...Object.keys(cur.p)])) {
         p[n] = Q.nlerp(old.p[n] || [0, 0, 0, 1], cur.p[n] || [0, 0, 0, 1], k);
       }
-      cur = { p, root: cur.root.map((v, i) => lerp(old.root[i], v, k)), turn: lerp(old.turn, cur.turn, k) };
+      cur = { p, root: cur.root.map((v, i) => lerp(old.root[i], v, k)), turn: lerp(old.turn, cur.turn, k), plant: cur.plant && k > 0.5 };
     }
     if (this.state === 'dubs') this.glasses = Math.min(1, st / 0.7);
     else if (this.glasses > 0) this.glasses = Math.max(0, this.glasses - dt * 2.5);
@@ -623,6 +624,11 @@ export class Guy {
       if (b.parent < 0) L = M4.mul(M4.fromQT([0, 0, 0, 1], cur.root), L);
       W[i] = b.parent >= 0 ? M4.mul(W[b.parent], L) : L;
     });
+    if (cur.plant) {
+      const fy = Math.min(W[this.byName['foot.l']][13], W[this.byName['foot.r']][13]);
+      const dy = this.rest[this.byName['foot.l']][13] - fy;
+      for (const w of W) w[13] += dy;
+    }
     return W;
   }
 
