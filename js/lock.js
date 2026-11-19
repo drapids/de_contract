@@ -68,7 +68,7 @@ export async function unlock(guy, sfx) {
       ui.classList.remove('checking');
       if (ok) {
         localStorage.setItem('dc.key', pass);
-        sfx?.ok?.(); sfx?.voice?.('defused');
+        if (!sfx?.defused?.()) sfx?.voice?.('defused');
         big.textContent = 'bomb has been defused';
         ui.classList.add('won');
         if (guy) { guy.c4.text = ''; guy.set('rise'); }
