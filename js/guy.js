@@ -181,6 +181,7 @@ export class Guy {
   constructor(host, opts = {}) {
     this.host = host;
     this.base = opts.base || 'assets/';
+    this.loader = opts.loader || null;
     this.scale = opts.pixel || 2;
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'guy-gl';
@@ -220,7 +221,7 @@ export class Guy {
 
   async load() {
     const gl = this.gl;
-    const [data, clips] = await Promise.all([fetch(this.base + 'guy.json').then(r => r.json()), fetch(this.base + 'anims.json').then(r => r.json()).catch(() => ({}))]);
+    const [data, clips] = await Promise.all([this.json(this.base + 'guy.json'), this.json(this.base + 'anims.json').catch(() => ({}))]);
     this.clips = clips;
     for (const c of Object.values(clips)) {
       c.mean = {};
@@ -231,12 +232,6 @@ export class Guy {
       }
       c.rmean = [0, 1, 2].map(i => { let a = 0; for (let f = 0; f < c.n; f++) a += c.r[f * 3 + i]; return a / c.n; });
     }
-    this.bones = data.bones.map(b => ({ name: b.name, parent: b.parent, local: new Float32Array(b.local), inv: new Float32Array(b.invBind) }));
-    this.byName = {};
-    this.bones.forEach((b, i) => this.byName[b.name] = i);
-    this.rest = [];
-    this.bones.forEach((b, i) => { this.rest[i] = b.parent >= 0 ? M4.mul(this.rest[b.parent], b.local) : b.local; });
-    this.restQ = this.rest.map(m => Q.fromMat(m));
     const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(o); return o; };
     const p = gl.createProgram();
     gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(p);
@@ -244,19 +239,15 @@ export class Guy {
     this.loc = {};
     for (const n of ['aP', 'aN', 'aU', 'aB', 'aW', 'aH']) this.loc[n] = gl.getAttribLocation(p, n);
     for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uTex', 'uTint', 'uUnlit', 'uShine', 'uHandOnly']) this.loc[n] = gl.getUniformLocation(p, n);
-    this.body = this.mesh(data.pos, data.nor, data.uv, data.idx, data.bi, data.bw);
-    const hs = [this.byName['hand.l'], this.byName['hand.r']], hw = [];
-    for (let v = 0; v < data.bi.length / 4; v++) { let w = 0; for (let j = 0; j < 4; j++) if (hs.includes(data.bi[v * 4 + j])) w += data.bw[v * 4 + j]; hw.push(w); }
-    this.body.h = this.gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.body.h); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(hw), gl.STATIC_DRAW);
-    this.skinTex = await this.texFromUrl(this.base + 'guy.png', false);
+    this.baseRig = await this.makeRig(data, this.base + 'guy.png');
+    this.applyRig(this.baseRig);
     this.white = this.texFromCanvas(Object.assign(document.createElement('canvas'), { width: 2, height: 2 }), '#fff');
 
     const lens = (sx) => box(0.072, 0.036, 0.012, sx * 0.043, 0, 0);
     const shades = merge(lens(-1), lens(1), box(0.03, 0.01, 0.01, 0, 0.008, 0),
       box(0.008, 0.01, 0.12, -0.081, 0.006, -0.058), box(0.008, 0.01, 0.12, 0.081, 0.006, -0.058));
     this.shades = this.rigid(shades);
-    this.shadesOff = M4.mul(this.invRest('head'), M4.fromQT([0, 0, 0, 1], [0, 1.703, 0.118]));
-
+    
     this.pole = this.rigid(box(0.03, 0.95, 0.03, 0, 0.24, 0));
     this.board = this.rigid(merge(box(0.66, 0.34, 0.03, 0, 0.66, -0.02)));
     this.boardFace = this.rigid(quad(0.62, 0.30, 0.0));
@@ -267,8 +258,7 @@ export class Guy {
     this.card = this.rigid(box(0.5, 0.26, 0.02));
     this.cardFace = this.rigid(quad(0.48, 0.24, 0));
     this.watch = this.rigid(box(0.04, 0.03, 0.035));
-    this.watchOff = M4.mul(this.invRest('lowerArm.l'), M4.fromQT([0, 0, 0, 1], [0.76, 1.425, 0.035]));
-
+    
     this.phone = this.rigid(merge(box(0.055, 0.16, 0.035), box(0.01, 0.11, 0.01, 0.017, 0.13, -0.005), box(0.016, 0.016, 0.016, 0.017, 0.19, -0.005)));
     this.phoneFace = this.rigid(quad(0.048, 0.15, 0.0181));
     this.phoneTex = this.texFromCanvas(this.paint(64, 192, x => {
@@ -295,13 +285,10 @@ export class Guy {
       this.gun = this.mesh(g.pos, g.nor, g.uv, g.idx);
       this.gunTex = await this.texFromUrl(this.base + 'revolver.png', false);
     } catch (e) { this.gun = null; }
-    this.spookRig = { bones: this.bones, rest: this.rest, restQ: this.restQ, byName: this.byName, body: this.body, tex: this.skinTex, tint: [0.75, 0.9, 1.0, 0.5], ghost: true };
+    this.spookRig = { ...this.baseRig, tint: [0.75, 0.9, 1.0, 0.5], ghost: true };
     try {
-      const sp = await fetch(this.base + 'specter.json').then(r => { if (!r.ok) throw 0; return r.json(); });
-      const bones = sp.bones.map(b => ({ name: b.name, parent: b.parent, local: new Float32Array(b.local), inv: new Float32Array(b.invBind) }));
-      const byName = {}; bones.forEach((b, i) => byName[b.name] = i);
-      const rest = []; bones.forEach((b, i) => { rest[i] = b.parent >= 0 ? M4.mul(rest[b.parent], b.local) : b.local; });
-      this.spookRig = { bones, rest, restQ: rest.map(m => Q.fromMat(m)), byName, body: this.mesh(sp.pos, sp.nor, sp.uv, sp.idx, sp.bi, sp.bw), tex: await this.texFromUrl(this.base + 'specter.png', false), tint: [1, 1, 1, sp.alpha ?? 0.92], ghost: false };
+      const sp = await this.json(this.base + 'specter.json');
+      this.spookRig = { ...(await this.makeRig(sp, this.base + 'specter.png')), tint: [1, 1, 1, sp.alpha ?? 0.92], ghost: false };
     } catch (e) {}
     this.spook = { on: false, x: 1.6, z: -0.2, turn: -90, clip: 'Zombie_Idle_Loop', t0: 0, alpha: 1, flick: 0 };
     this.resize();
@@ -310,10 +297,90 @@ export class Guy {
     document.addEventListener('visibilitychange', () => { if (!document.hidden) requestAnimationFrame(this.loop); });
   }
 
+  async json(url) {
+    if (this.loader) return this.loader(url, 'json');
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(url + ' ' + r.status);
+    return r.json();
+  }
+
+  async imgUrl(url) {
+    return this.loader ? this.loader(url, 'img') : url;
+  }
+
+  async makeRig(data, texUrl) {
+    const gl = this.gl;
+    const bones = data.bones.map(b => ({ name: b.name, parent: b.parent, local: new Float32Array(b.local), inv: new Float32Array(b.invBind) }));
+    const byName = {};
+    bones.forEach((b, i) => byName[b.name] = i);
+    const rest = [];
+    bones.forEach((b, i) => { rest[i] = b.parent >= 0 ? M4.mul(rest[b.parent], b.local) : b.local; });
+    const body = this.mesh(data.pos, data.nor, data.uv, data.idx, data.bi, data.bw);
+    const hs = [byName['hand.l'], byName['hand.r']], hw = [];
+    for (let v = 0; v < data.bi.length / 4; v++) { let w = 0; for (let j = 0; j < 4; j++) if (hs.includes(data.bi[v * 4 + j])) w += data.bw[v * 4 + j]; hw.push(w); }
+    body.h = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, body.h); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(hw), gl.STATIC_DRAW);
+    const tex = await this.texFull(await this.imgUrl(texUrl));
+    const pos = n => M4.pos(rest[byName[n]]);
+    return { bones, byName, rest, restQ: rest.map(m => Q.fromMat(m)), body, tex, hip: data.hip || pos('hip')[1], eyes: data.eyes || [0, 1.703, 0.106], pos };
+  }
+
+  applyRig(r) {
+    this.rig = r;
+    Object.assign(this, { bones: r.bones, byName: r.byName, rest: r.rest, restQ: r.restQ, body: r.body, skinTex: r.tex });
+    this.shadesOff = this.phoneOff = this.watchOff = this.gunOff = null;
+  }
+
+  rebase(bone, worldOrange) {
+    const b = this.baseRig, r = this.rig;
+    const d = [0, 1, 2].map(i => r.pos(bone)[i] - b.pos(bone)[i]);
+    return M4.mul(this.invRest(bone), M4.mul(M4.fromQT([0, 0, 0, 1], d), worldOrange));
+  }
+
+  async setSkin(name) {
+    this.skins ||= {};
+    if (name === 'orange' || !name) { this.applyRig(this.baseRig); return; }
+    if (!this.skins[name]) {
+      const data = await this.json(this.base + 'agents/' + name + '.json');
+      this.skins[name] = await this.makeRig(data, this.base + 'agents/' + name + '.png');
+    }
+    this.applyRig(this.skins[name]);
+  }
+
+  async setGhost(name) {
+    if (!name) return;
+    this.skins ||= {};
+    if (!this.skins[name]) {
+      const data = await this.json(this.base + 'agents/' + name + '.json');
+      this.skins[name] = await this.makeRig(data, this.base + 'agents/' + name + '.png');
+    }
+    const r = this.skins[name];
+    this.spookRig = { ...r, tint: [0.8, 0.92, 1.0, 0.55], ghost: true };
+  }
+
+  texFull(url) {
+    return new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => {
+        const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+        c.getContext('2d').drawImage(im, 0, 0);
+        res(this.texFromCanvas(c));
+      };
+      im.onerror = rej;
+      im.src = url;
+    });
+  }
+
   paint(w, h, f) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     f(c.getContext('2d'));
     return c;
+  }
+
+  invRestOf2(rig, name) {
+    const m = rig.rest[rig.byName[name]];
+    const q = Q.conj(Q.fromMat(m)), r = M4.fromQT(q, [0, 0, 0]), t = M4.pos(m);
+    r[12] = -(r[0] * t[0] + r[4] * t[1] + r[8] * t[2]); r[13] = -(r[1] * t[0] + r[5] * t[1] + r[9] * t[2]); r[14] = -(r[2] * t[0] + r[6] * t[1] + r[10] * t[2]);
+    return r;
   }
 
   invRest(name) {
@@ -625,7 +692,7 @@ export class Guy {
       const q = Q.nlerp(v.slice(a * 4, a * 4 + 4), v.slice(b * 4, b * 4 + 4), u);
       p[k] = damp < 1 ? Q.nlerp(c.mean[k], q, damp) : q;
     }
-    const r = c.r, H = 0.85;
+    const r = c.r, H = this.rig?.hip || 0.85;
     const root = [0, 1, 2].map(i => { const v = r[a * 3 + i] * (1 - u) + r[b * 3 + i] * u; return (c.rmean[i] + (v - c.rmean[i]) * damp) * H; });
     return { p, root, len: c.d };
   }
@@ -856,6 +923,7 @@ export class Guy {
     if (this.glasses > 0) {
       const drop = this.state === 'dubs' ? (1 - back(this.glasses)) * 0.9 : 0;
       const fade = this.state === 'dubs' ? 1 : this.glasses;
+      this.shadesOff ||= M4.mul(this.invRest('head'), M4.fromQT([0, 0, 0, 1], [0, this.rig.eyes[1], this.rig.eyes[2] + 0.012]));
       let m = M4.mul(bw('head'), this.shadesOff);
       if (drop) m = M4.mul(M4.fromQT(Q.euler([0, 0, drop * 40]), [0, drop, 0]), m);
       if (this.state !== 'dubs') m = M4.mul(M4.fromQT([0, 0, 0, 1], [0, (1 - fade) * -0.3, 0]), m);
@@ -910,7 +978,7 @@ export class Guy {
     const handMat = (n, off) => M4.mul(bw('hand.' + n), off);
     if (!this.phoneOff) {
       const R = (cols, t) => new Float32Array([...cols[0], 0, ...cols[1], 0, ...cols[2], 0, ...t, 1]);
-      this.phoneOff = M4.mul(this.invRest('hand.r'), R([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], [-0.875, 1.37, 0.03]));
+      this.phoneOff = this.rebase('hand.r', R([[0, 0, 1], [-1, 0, 0], [0, -1, 0]], [-0.875, 1.37, 0.03]));
     }
     const phoneK = this.state === 'phone' ? Math.min(1, st / 0.4) : this.prev === 'phone' ? 1 - this.blend : 0;
     if (phoneK > 0.01) {
@@ -929,7 +997,7 @@ export class Guy {
       if (Math.random() < 0.04) this.spark(VP, model, [0.05, 0.3, 0.6]);
     }
     if (this.gun && this.armed) {
-      if (!this.gunOff) this.gunOff = GUN_OFF;
+      if (!this.gunOff) this.gunOff = this.rebase('hand.r', M4.mul(this.baseRig.rest[this.baseRig.byName['hand.r']], GUN_OFF));
       const gm = M4.mul(bw('hand.r'), this.gunOff);
       this.drawRigid(this.gun, gm, this.gunTex, [1, 1, 1, 1], 0.15, 0.8);
       this.muzzle = M4.mul(model, M4.mul(gm, M4.fromQT([0, 0, 0, 1], [2.05, 1.38, 0])));
@@ -937,6 +1005,7 @@ export class Guy {
     if (this.spook.on) this.drawSpook(VP, now);
     this.drawShots(VP, now);
     const loadK = this.state === 'watch' ? 1 : this.prev === 'watch' ? 1 - this.blend : 0;
+    this.watchOff ||= this.rebase('lowerArm.l', M4.fromQT([0, 0, 0, 1], [0.76, 1.425, 0.035]));
     if (loadK > 0.01) this.drawRigid(this.watch, M4.mul(bw('lowerArm.l'), this.watchOff), this.white, [0.75, 0.68, 0.3, 1], 0, 1);
   }
 
@@ -964,7 +1033,7 @@ export class Guy {
     gl.drawElements(gl.TRIANGLES, rig.body.count, gl.UNSIGNED_SHORT, 0);
     gl.disable(gl.BLEND);
     if (S.gun && this.gun) {
-      const off = GUN_OFF;
+      const off = M4.mul(this.invRestOf2(rig, 'hand.r'), M4.mul(M4.fromQT([0, 0, 0, 1], [0, 1, 2].map(i => rig.pos('hand.r')[i] - this.baseRig.pos('hand.r')[i])), M4.mul(this.baseRig.rest[this.baseRig.byName['hand.r']], GUN_OFF)));
       const gm = M4.mul(W[rig.byName['hand.r']], off);
       this.drawRigid(this.gun, gm, this.gunTex, [1, 1, 1, 1], 0.15, 0.8);
       this.spookMuzzle = M4.mul(m, M4.mul(gm, M4.fromQT([0, 0, 0, 1], [2.05, 1.38, 0])));
