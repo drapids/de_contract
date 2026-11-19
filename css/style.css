@@ -483,3 +483,33 @@ body .world-ui:has(.ch-hud:not([hidden])) .bank { top: auto; bottom: 10px; }
 .bf-meter s { position: absolute; left: 0; top: 0; bottom: 0; background: #e8e2c8; }
 .bf-meter b { position: absolute; top: -4px; bottom: -4px; width: 12%; background: rgba(110,200,80,.55); border: 2px solid #6fc04a; }
 .bf-tip { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); text-shadow: 1px 1px 0 #000; white-space: nowrap; }
+
+html, body, .world-gl { cursor: url(../assets/ui/cur.png) 1 1, default; }
+button, a, select, label.chk, .tu, .btn, [data-tab], .arm-foe, .lt-case, .nm-card, .wh-n, .card.ok, .w-prompt, .bk-inv, summary { cursor: url(../assets/ui/cur_aim.png) 15 15, pointer !important; }
+input[type=text], input:not([type]), input[type=number], textarea { cursor: text; }
+.world-gl:active { cursor: url(../assets/ui/cur_aim.png) 15 15, grabbing; }
+* { scrollbar-color: #6b7461 #2d3226; scrollbar-width: auto; }
+::-webkit-scrollbar { width: 15px; height: 15px; }
+::-webkit-scrollbar-track { background: #2d3226; border: 1px solid; border-color: var(--lo) var(--hi) var(--hi) var(--lo); }
+::-webkit-scrollbar-thumb { background: #4c5844; border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); box-shadow: inset 1px 1px 0 #6b7461; }
+::-webkit-scrollbar-thumb:hover { background: #57634d; }
+::-webkit-scrollbar-thumb:active { background: #958831; }
+::-webkit-scrollbar-button:single-button { background: #3e4637; border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); height: 15px; width: 15px; background-repeat: no-repeat; background-position: center; }
+::-webkit-scrollbar-button:single-button:vertical:decrement { background-image: linear-gradient(45deg, transparent 50%, #c8ceb9 50%), linear-gradient(-45deg, transparent 50%, #c8ceb9 50%); background-size: 5px 5px, 5px 5px; background-position: 2px 5px, 6px 5px; }
+::-webkit-scrollbar-button:single-button:vertical:increment { background-image: linear-gradient(135deg, transparent 50%, #c8ceb9 50%), linear-gradient(-135deg, transparent 50%, #c8ceb9 50%); background-size: 5px 5px, 5px 5px; background-position: 2px 4px, 6px 4px; }
+::-webkit-scrollbar-button:single-button:active { border-color: var(--lo) var(--hi) var(--hi) var(--lo); }
+::-webkit-scrollbar-corner { background: #3e4637; }
+.bk-scrap::before { content: ''; display: inline-block; width: 16px; height: 16px; margin-right: 4px; vertical-align: -3px; background: url(../assets/ui/scrap.png) center / contain no-repeat; }
+.tag.clock { background: #3a1e18; color: #e8a090; }
+.tag.clock.soon { animation: scampulse .6s infinite alternate; }
+.shop-chk { width: 16px; }
+.shop-count { color: var(--gold); margin-left: 8px; font-weight: normal; }
+tr.bought td { opacity: .45; text-decoration: line-through; }
+.budget { display: flex; align-items: center; gap: 4px; color: var(--dim); }
+.budget .inp { width: 70px; }
+.ev-t td.pos { color: var(--green); }
+.ev-t td.neg { color: var(--red); }
+.alert-row { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--lo); }
+.alert-row.hit { background: rgba(143,209,111,.12); }
+.alert-row img { width: 48px; height: 36px; object-fit: contain; }
+.alert-row b { flex: 1; font-weight: normal; }
