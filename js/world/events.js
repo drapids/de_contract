@@ -109,7 +109,11 @@ export class Events {
     if (hol === 'halloween') for (const [x, z, s] of sc === w.scenes.yard ? [[-2, 2, 1.4], [5, -6, 1], [-8, 6, 1.2], [1, -6.8, 0.9]] : [[-2.6, -2.5, 0.9], [3.6, 1.2, 0.7]]) e.draw(this.pumpkin, at(x, 0, z, s));
     if (w.av.cur === 'Idle_TalkingPhone_Loop' && w.av.W && !w.chessOn) {
       const R = w.av.rig, H = w.av.W[R.byName['hand.r']];
-      if (H) e.draw(this.bookObj, M4.mul(M4.mul(w.av.model(), H), at(0, 0.09, 0.05)));
+      if (H) {
+        const o = Float32Array.from(H);
+        for (const c of [0, 4, 8]) { const l = Math.hypot(o[c], o[c + 1], o[c + 2]) || 1; o[c] /= l; o[c + 1] /= l; o[c + 2] /= l; }
+        e.draw(this.bookObj, M4.mul(M4.mul(w.av.model(), o), at(0, 0.09, 0.05)));
+      }
     }
   }
 

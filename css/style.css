@@ -464,3 +464,22 @@ body .world-ui:has(.ch-hud:not([hidden])) .bank { top: auto; bottom: 10px; }
 .by-row b { font: bold 16px Georgia, serif; margin-right: 8px; }
 .by-row i { color: #7a5a3a; margin-right: 8px; }
 .by-row span { color: #3a2a20; font-size: 12px; }
+
+.ohne { position: absolute; left: -260px; bottom: 30px; width: 200px; pointer-events: none; transform: rotate(-6deg); z-index: 4; }
+.ohne img { width: 100%; display: block; border: 4px solid #eee; box-shadow: 5px 5px 0 rgba(0,0,0,.5); }
+.ohne span { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); background: #111; color: #fff; font: bold 14px Impact, Verdana, sans-serif; padding: 2px 8px; white-space: nowrap; }
+.ohne.go { animation: ohne 3.2s ease-in-out forwards; }
+@keyframes ohne { 0% { left: -260px; } 14% { left: 20px; } 80% { left: 20px; } 100% { left: -260px; } }
+.w-tip { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); background: #c4b550; color: #1d1f16; font-weight: bold; padding: 4px 12px; border: 2px solid #111; animation: scampulse .5s infinite alternate; }
+.w-tip[hidden] { display: none; }
+.beef { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 320px; pointer-events: auto; background: var(--panel); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); box-shadow: 4px 4px 0 rgba(0,0,0,.5); }
+.beef-hud { position: absolute; inset: 0; pointer-events: auto; }
+.bf-hp { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: min(560px, 90vw); display: flex; gap: 30px; }
+.bf-hp > div { flex: 1; }
+.bf-hp b { font: bold 14px Verdana, sans-serif; text-shadow: 2px 2px 0 #000; }
+.bf-hp i { display: block; height: 14px; background: #3a1410; border: 2px solid #111; margin-top: 3px; }
+.bf-hp s { display: block; height: 100%; background: #c94b2e; transition: width .3s; }
+.bf-meter { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); width: min(420px, 80vw); height: 22px; background: #1a1c16; border: 2px solid #111; }
+.bf-meter s { position: absolute; left: 0; top: 0; bottom: 0; background: #e8e2c8; }
+.bf-meter b { position: absolute; top: -4px; bottom: -4px; width: 12%; background: rgba(110,200,80,.55); border: 2px solid #6fc04a; }
+.bf-tip { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); text-shadow: 1px 1px 0 #000; white-space: nowrap; }

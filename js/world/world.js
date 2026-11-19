@@ -9,6 +9,7 @@ import { Loot } from './loot.js';
 import { Wheel } from './wheel.js';
 import { Events } from './events.js';
 import { Blyat } from './blyat.js';
+import { Extras } from './extras.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -56,6 +57,7 @@ export class World {
     this.wheel = new Wheel(this);
     this.events = new Events(this);
     this.blyat = new Blyat(this);
+    this.extras = new Extras(this);
     const emit = opts.onEvent;
     this.opts.onEvent = (ev, x) => { this.event(ev, x); emit?.(ev, x); };
     this.npcs = [];
@@ -104,6 +106,7 @@ export class World {
     await Promise.all([this.buildBasement(), this.buildYard()]);
     this.chess.build();
     await this.events.build();
+    await this.extras.build();
     this.go('basement', true);
   }
 
@@ -282,6 +285,8 @@ export class World {
   event(ev, x) {
     const m = /^(arm|durak|chess)_(win|lose|w|l|d)$/.exec(ev);
     if (m) this.bank.reward(m[1], x, m[2][0] === 'w' ? 'w' : m[2][0] === 'd' ? 'd' : 'l');
+    if (m && m[2][0] === 'l') setTimeout(() => this.extras.ohneShow(), 1200);
+    if (ev === 'case' && x <= 2 && Math.random() < 0.25) setTimeout(() => this.extras.ohneShow(), 600);
   }
 
   claimDrop() {
@@ -584,6 +589,7 @@ export class World {
     this.step(dt, now);
     this.chickenStep(dt, now);
     this.events.update(dt, now);
+    this.extras.update(dt, now);
     const f = this.flick;
     if (now > f.next) { f.until = now + 0.15 + Math.random() * 0.5; f.next = now + 4 + Math.random() * 14; }
     f.k = now < f.until ? (Math.random() < 0.5 ? 0.15 : 0.9) : 1;
@@ -611,6 +617,7 @@ export class World {
     for (const n of this.npcs) if (this.scenes[n.scene] === sc) { n.av.update(Math.min(dt, 0.05)); n.av.draw(); }
     if (sc === this.scenes.yard) this.drawYardExtras(now);
     this.events.draw(now);
+    this.extras.draw(now);
     if (this.chessOn && this.chess.g) this.chess.foe.draw();
     if (this.match) this.arm.foe.draw();
     if (this.durakOn && this.durak.g) this.durak.foe.draw();
