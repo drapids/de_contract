@@ -580,7 +580,7 @@ export class Guy {
       const fwl = Math.hypot(...fw); fw = fw.map(v => v / fwl);
       const rt = [up[1] * fw[2] - up[2] * fw[1], up[2] * fw[0] - up[0] * fw[2], up[0] * fw[1] - up[1] * fw[0]];
       const hh = 0.27, bob = wave(now, 0.6) * 0.004;
-      const c = [palm[0] + up[0] * (hh - 0.05) + fw[0] * 0.05, palm[1] + up[1] * (hh - 0.05) + bob, palm[2] + up[2] * (hh - 0.05) + fw[2] * 0.05];
+      const c = [palm[0] + up[0] * (hh - 0.075) - fw[0] * 0.035, palm[1] + up[1] * (hh - 0.075) + bob, palm[2] + up[2] * (hh - 0.075) - fw[2] * 0.035];
       const k = holdK;
       const m = new Float32Array([rt[0] * k, rt[1] * k, rt[2] * k, 0, up[0] * k, up[1] * k, up[2] * k, 0, fw[0] * k, fw[1] * k, fw[2] * k, 0, c[0], c[1], c[2], 1]);
       this.drawRigid(this.card, m, this.white, [0.16, 0.17, 0.13, 1]);
