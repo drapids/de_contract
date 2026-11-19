@@ -87,20 +87,20 @@ export class Loot {
   inventory() { this.open('inv'); }
 
   vend() {
-    this.$('.lt-title').textContent = 'автомат';
+    this.$('.lt-title').textContent = 'vending machine';
     const cr = this.crates();
     const b = this.$('.lt-body');
-    if (!cr.length) { b.innerHTML = '<p class="dim">кейсов нет. сканер ещё не притащил скины, зайди позже</p>'; return; }
-    b.innerHTML = `<p class="dim">кейс ${CASE_PRICE} ₽. шансы как в кс: 79.9% синька, 16% фиол, 3.2% розовый, 0.64% красный, 0.26% нож/перчи.</p><div class="lt-cases">` +
+    if (!cr.length) { b.innerHTML = '<p class="dim">no cases yet. the scanner hasnt loaded skins, check back later</p>'; return; }
+    b.innerHTML = `<p class="dim">cases are ${CASE_PRICE} ₽. same odds as cs: 79.9% blue, 16% purple, 3.2% pink, 0.64% red, 0.26% knife/gloves.</p><div class="lt-cases">` +
       cr.map((c, i) => { const top = c.tiers[5][0]; return `<button class="lt-case" data-i="${i}">${top?.img ? `<img src="${esc(top.img)}" alt="" loading="lazy">` : '<div class="lt-noimg">?</div>'}<b>${esc(c.name)}</b><span>${CASE_PRICE} ₽${c.gold.length ? ' · ★' : ''}</span></button>`; }).join('') +
-      `</div><div class="lt-snack"><button class="btn" data-snack>доширак · 40 ₽</button><button class="btn" data-kvass>квас · 25 ₽</button></div>`;
+      `</div><div class="lt-snack"><button class="btn" data-snack>doshirak noodles · 40 ₽</button><button class="btn" data-kvass>kvass · 25 ₽</button></div>`;
     b.querySelectorAll('.lt-case').forEach(el => el.onclick = () => this.buy(cr[+el.dataset.i]));
-    b.querySelector('[data-snack]').onclick = () => { if (this.bank.spend(40)) { this.close(); this.w.say(['ммм доширак', 'ужин чемпиона', 'острый блять']); this.w.av.play('Interact', true); this.w.av.onDone = () => this.w.av.play('Idle_Loop'); } else this.w.say('денег нет'); };
-    b.querySelector('[data-kvass]').onclick = () => { if (this.bank.spend(25)) { this.close(); this.w.say(['квас топ', 'ахх', '*отрыжка*']); } else this.w.say('денег нет'); };
+    b.querySelector('[data-snack]').onclick = () => { if (this.bank.spend(40)) { this.close(); this.w.say(['ммм доширак', 'ужин чемпиона', 'острый блять']); this.w.av.play('Interact', true); this.w.av.onDone = () => this.w.av.play('Idle_Loop'); } else this.w.say('not enough rubles'); };
+    b.querySelector('[data-kvass]').onclick = () => { if (this.bank.spend(25)) { this.close(); this.w.say(['квас топ', 'ахх', '*отрыжка*']); } else this.w.say('not enough rubles'); };
   }
 
   buy(c) {
-    if (!this.bank.spend(CASE_PRICE)) { this.w.say(['денег нет', 'нищий я', 'иди поиграй в дурака сначала']); return; }
+    if (!this.bank.spend(CASE_PRICE)) { this.w.say('not enough rubles. go win some games'); return; }
     const won = this.roll(c);
     this.spin(c, won);
   }
@@ -145,7 +145,7 @@ export class Loot {
     const v = this.value(won);
     const g = this.$('.reel-got');
     g.hidden = false;
-    g.innerHTML = `<div class="rg-name" style="color:${TIER_COLORS[won.r]}">${esc(won.hash)}</div><div class="dim">float ${won.f.toFixed(4)} · ~${v} ₽</div><div class="row"><button class="btn" data-again>ещё</button><button class="btn" data-sell>продать за ${Math.round(v * 0.7)} ₽</button><button class="btn" data-keep>оставить</button></div>`;
+    g.innerHTML = `<div class="rg-name" style="color:${TIER_COLORS[won.r]}">${esc(won.hash)}</div><div class="dim">float ${won.f.toFixed(4)} · ~${v} ₽</div><div class="row"><button class="btn" data-again>open another</button><button class="btn" data-sell>sell for ${Math.round(v * 0.7)} ₽</button><button class="btn" data-keep>keep</button></div>`;
     g.querySelector('[data-again]').onclick = () => this.open('vend');
     g.querySelector('[data-keep]').onclick = () => this.close();
     g.querySelector('[data-sell]').onclick = () => { this.sell(this.bank.s.inv.length - 1, 'rub'); this.close(); };
@@ -166,12 +166,12 @@ export class Loot {
   }
 
   inv() {
-    this.$('.lt-title').textContent = 'инвентарь';
+    this.$('.lt-title').textContent = 'inventory';
     const inv = this.bank.s.inv;
     const b = this.$('.lt-body');
     const tot = inv.reduce((a, it) => a + this.value(it), 0);
-    b.innerHTML = `<p class="dim">${inv.length} шт · примерно ${tot.toLocaleString('ru-RU')} ₽. продать в автомат = 70%, хазмату на скрап = цена / 9.</p><div class="lt-grid">` +
-      (inv.length ? inv.map((it, i) => `<div class="lt-item" style="--c:${TIER_COLORS[it.r]}">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : '<div class="lt-noimg">?</div>'}<b>${esc(short(it.hash))}</b><span>${it.f.toFixed(4)} · ${this.value(it)} ₽</span><div class="row"><button class="btn" data-r="${i}">₽</button><button class="btn" data-s="${i}">scrap</button></div></div>`).reverse().join('') : '<p class="dim">пусто. автомат в подвале продаёт кейсы</p>') + '</div>';
+    b.innerHTML = `<p class="dim">${inv.length} items · worth about ${tot.toLocaleString('en-US')} ₽. ₽ button = sell to the vending machine for 70%, scrap button = sell to hazmat for scrap.</p><div class="lt-grid">` +
+      (inv.length ? inv.map((it, i) => `<div class="lt-item" style="--c:${TIER_COLORS[it.r]}">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : '<div class="lt-noimg">?</div>'}<b>${esc(short(it.hash))}</b><span>${it.f.toFixed(4)} · ${this.value(it)} ₽</span><div class="row"><button class="btn" data-r="${i}">₽</button><button class="btn" data-s="${i}">scrap</button></div></div>`).reverse().join('') : '<p class="dim">empty. the vending machine in the basement sells cases</p>') + '</div>';
     b.querySelectorAll('[data-r]').forEach(el => el.onclick = () => { this.sell(+el.dataset.r, 'rub'); this.inv(); });
     b.querySelectorAll('[data-s]').forEach(el => el.onclick = () => { this.sell(+el.dataset.s, 'scrap'); this.inv(); });
   }

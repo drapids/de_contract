@@ -58,7 +58,7 @@ export class Extras {
     this.paintBoard();
     this.w.shape(sc, merge(boxG(1.2, 0.85, 0.04, 1.25, 1.55, 2.975), boxG(1.3, 0.05, 0.08, 1.25, 1.1, 2.95)), this.w.t.wood);
     sc.items.push({ obj: e.shape({ P: [1.82, 1.16, 2.95, 0.68, 1.16, 2.95, 0.68, 1.94, 2.95, 1.82, 1.94, 2.95], N: [0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1], U: [0, 1, 1, 1, 1, 0, 0, 0], I: [0, 1, 2, 0, 2, 3] }, this.boardT), m: M4.id() });
-    sc.acts.push({ p: [1.25, 1.2, 2.6], r: 1.2, label: 'забить стрелку', act: () => this.beefMenu() });
+    sc.acts.push({ p: [1.25, 1.2, 2.6], r: 1.2, label: 'start beef', act: () => this.beefMenu() });
   }
 
   tally() { try { return JSON.parse(localStorage.getItem('dc.beef')) || { ct: 0, t: 0, log: [] }; } catch { return { ct: 0, t: 0, log: [] }; } }
@@ -81,7 +81,7 @@ export class Extras {
       if (n > 30) { x.font = '14px "Comic Sans MS", cursive'; x.fillText('+' + (n - 30), cx, 150); }
     };
     marks(b.ct, 64); marks(b.t, 192);
-    x.font = '11px "Comic Sans MS", cursive'; x.fillStyle = 'rgba(230,235,225,.6)'; x.fillText('бифы подвала', 128, 156);
+    x.font = '11px "Comic Sans MS", cursive'; x.fillStyle = 'rgba(230,235,225,.6)'; x.fillText('basement beef', 128, 156);
     const gl = this.e.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.boardT);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.boardC);
@@ -102,7 +102,7 @@ export class Extras {
     if (Date.now() - (this.ohneAt || 0) < 45000) return;
     this.ohneAt = Date.now();
     const o = this.ohne;
-    o.querySelector('span').textContent = line || pick(['...', 'bro.', 'это было плохо', 'why would you do that', 'я разочарован']);
+    o.querySelector('span').textContent = line || pick(['...', 'bro.', 'that was bad', 'why would you do that', 'im disappointed']);
     o.classList.remove('go'); void o.offsetWidth; o.classList.add('go');
   }
 
@@ -235,7 +235,7 @@ export class Extras {
     const n = 3 + (Math.random() * 3 | 0);
     this.say(pick(['наки идут', 'это голые?', 'бля рейд']), 2400);
     this.tip.hidden = false;
-    this.tip.textContent = 'кликни ему по голове чтобы залочиться';
+    this.tip.textContent = 'click his head to lock in';
     this.nk = [];
     for (let i = 0; i < n; i++) {
       const a = await this.npc('assets/guy', [1.15, 0.82, 0.68, 1]);
@@ -270,7 +270,7 @@ export class Extras {
       for (const c of this.nk) if (!c.dead) { c.gone = true; }
       const lost = Math.min(w.bank.s.scrap, 40);
       if (lost) w.bank.add(0, -lost);
-      this.say(lost ? 'они спиздили мой скрап' : 'ушли', 2600);
+      this.say(lost ? 'they stole ' + lost + ' scrap' : 'they left', 2600);
       this.ohneShow();
     }
     this.nk = null;
@@ -300,10 +300,10 @@ export class Extras {
     const m = document.createElement('div');
     m.className = 'beef win';
     const b = this.tally();
-    m.innerHTML = `<div class="dlg-t"><span>стрелка: CT ${b.ct} - ${b.t} T</span><button class="x">x</button></div><div class="arm-list">
-      <button class="arm-foe" data-k="slap"><b>пощёчины</b><em>по очереди. кто первый упал тот лох</em></button>
-      <button class="arm-foe" data-k="box"><b>бокс</b><em>быстрее, сильнее, больнее</em></button>
-      <button class="arm-foe" data-k="knife"><b>на ножах</b><em>(резиновых. мы не звери)</em></button></div>`;
+    m.innerHTML = `<div class="dlg-t"><span>beef: CT ${b.ct} - ${b.t} T</span><button class="x">x</button></div><div class="arm-list">
+      <button class="arm-foe" data-k="slap"><b>slap contest</b><em>take turns. first one down loses</em></button>
+      <button class="arm-foe" data-k="box"><b>boxing</b><em>faster, harder, more pain</em></button>
+      <button class="arm-foe" data-k="knife"><b>knife fight</b><em>(rubber knives. we're not animals)</em></button></div>`;
     w.ui.append(m);
     w.busy = true;
     m.querySelector('.x').onclick = () => { m.remove(); w.busy = false; };
@@ -324,7 +324,7 @@ export class Extras {
     this.fight = { hp: [100, 100], turn: 0, meter: 0, dir: 1, kind, over: false };
     const ui = document.createElement('div');
     ui.className = 'beef-hud';
-    ui.innerHTML = `<div class="bf-hp"><div><b>ты</b><i><s></s></i></div><div><b>${foeSkin === 'sas' ? 'CT' : 'T'}</b><i><s></s></i></div></div><div class="bf-meter"><s></s><b></b></div><div class="bf-tip">жми space когда полоска в зелёном</div>`;
+    ui.innerHTML = `<div class="bf-hp"><div><b>you</b><i><s></s></i></div><div><b>${foeSkin === 'sas' ? 'CT' : 'T'}</b><i><s></s></i></div></div><div class="bf-meter"><s></s><b></b></div><div class="bf-tip">hit space when the bar is in the green</div>`;
     w.ui.append(ui);
     w.shot = [[C[0], 1.5, C[2] - 2.2], [C[0], 1.15, C[2]]];
     const anim = { slap: ['Spell_Simple_Shoot', 'Hit_Head'], box: ['Spell_Simple_Shoot', 'Hit_Knockback'], knife: ['Interact', 'Hit_Head'] }[kind];
@@ -337,7 +337,7 @@ export class Extras {
     hpUi();
     while (F.hp[0] > 0 && F.hp[1] > 0 && w.active) {
       const mine = F.turn === 0;
-      ui.querySelector('.bf-tip').textContent = mine ? 'твой удар: жми space в зелёном' : 'он бьёт...';
+      ui.querySelector('.bf-tip').textContent = mine ? 'your swing: hit space in the green' : 'he swings...';
       let power = 0;
       if (mine) {
         pressed = false;

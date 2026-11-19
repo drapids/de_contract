@@ -1,5 +1,5 @@
 const BOOK = {
-  'привет и пока': [
+  'hi & bye': [
     ['привет', 'privet', 'hi'],
     ['здарова', 'zdarova', 'yo / sup'],
     ['всем привет', 'vsem privet', 'hi all (say it at round start)'],
@@ -8,7 +8,7 @@ const BOOK = {
     ['спасибо', 'spasibo', 'thanks'],
     ['пожалуйста', 'pozhaluysta', 'please / you\'re welcome']
   ],
-  'в игре': [
+  'in game': [
     ['раш б', 'rash b', 'rush b'],
     ['идём на а', 'idyom na a', 'we go a'],
     ['бомба на а', 'bomba na a', 'bomb is on a'],
@@ -25,7 +25,7 @@ const BOOK = {
     ['слушай', 'slushay', 'listen'],
     ['гг', 'ge ge', 'gg']
   ],
-  'эмоции': [
+  'reactions': [
     ['изи', 'izi', 'easy'],
     ['красава', 'krasava', 'nice one / beauty'],
     ['ну ты даёшь', 'nu ty dayosh', 'damn you\'re something'],
@@ -35,7 +35,7 @@ const BOOK = {
     ['ахахах', 'akhakhakh', 'hahaha'],
     ['кринж', 'krinzh', 'cringe']
   ],
-  'мат (осторожно)': [
+  'swears (careful)': [
     ['блять', 'blyat\'', 'f***, damn (the classic)'],
     ['сука', 'suka', 'b**** (used for everything)'],
     ['сука блять', 'suka blyat\'', 'the combo'],
@@ -49,7 +49,7 @@ const BOOK = {
     ['чёрт', 'chyort', 'damn (soft)'],
     ['ёлки палки', 'yolki palki', 'darn it (grandma approved)']
   ],
-  'торговля': [
+  'trading': [
     ['сколько', 'skol\'ko', 'how much'],
     ['дорого', 'dorogo', 'expensive'],
     ['дёшево', 'dyoshevo', 'cheap'],
@@ -60,7 +60,7 @@ const BOOK = {
     ['перчатки', 'perchatki', 'gloves'],
     ['кейс', 'keys', 'case']
   ],
-  'по жизни': [
+  'everyday': [
     ['братан', 'bratan', 'bro'],
     ['всё норм', 'vsyo norm', 'all good'],
     ['кушать хочу', 'kushat\' khochu', 'i\'m hungry'],
@@ -81,9 +81,9 @@ export class Blyat {
     el.className = 'blyat';
     el.hidden = true;
     const cats = Object.keys(BOOK);
-    el.innerHTML = `<div class="by-book"><div class="by-cover"><b>БЛЯТЛИНГО</b><span>русский для кс</span><button class="by-x">x</button></div>
+    el.innerHTML = `<div class="by-book"><div class="by-cover"><b>БЛЯТЛИНГО</b><span>russian for cs</span><button class="by-x">x</button></div>
       <div class="by-tabs">${cats.map((c, i) => `<button data-c="${i}"${i ? '' : ' class="on"'}>${c}</button>`).join('')}</div>
-      <div class="by-tr"><input placeholder="переведи... (en или ru)"><span class="by-out"></span></div>
+      <div class="by-tr"><input placeholder="translate... (english or russian)"><span class="by-out"></span></div>
       <div class="by-list"></div></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
@@ -104,7 +104,7 @@ export class Blyat {
 
   show(cat) {
     const l = this.$('.by-list');
-    l.innerHTML = BOOK[cat].map(([ru, tr, en], i) => `<div class="by-row"><div><b>${esc(ru)}</b><i>${esc(tr)}</i><span>${esc(en)}</span></div><button data-say="${esc(ru)}" title="послушать">🔊</button></div>`).join('');
+    l.innerHTML = BOOK[cat].map(([ru, tr, en], i) => `<div class="by-row"><div><b>${esc(ru)}</b><i>${esc(tr)}</i><span>${esc(en)}</span></div><button data-say="${esc(ru)}" title="hear it">🔊</button></div>`).join('');
     l.querySelectorAll('[data-say]').forEach(b => b.onclick = () => this.say(b.dataset.say));
   }
 
@@ -133,7 +133,7 @@ export class Blyat {
         if (score * f > bs) { bs = score * f; best = r; }
       }
     }
-    out.innerHTML = best ? `<b>${esc(best[0])}</b> · ${esc(best[1])} · ${esc(best[2])} <button>🔊</button>` : 'хз. такого в книжке нет';
+    out.innerHTML = best ? `<b>${esc(best[0])}</b> · ${esc(best[1])} · ${esc(best[2])} <button>🔊</button>` : 'not in the book';
     out.querySelector('button')?.addEventListener('click', () => this.say(best[0]));
   }
 }

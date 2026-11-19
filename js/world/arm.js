@@ -15,8 +15,8 @@ export const FOES = [
   { id: 'quandale', name: 'Quandale Dingle', skin: 'assets/chars/quandale', push: 0.05, spd: 150, surge: 0, lines: ['what is up guys', 'нет нет нет', 'goofy ahh arm'] },
   { id: 'pork', name: 'John Pork', skin: 'assets/chars/pork', push: 0.065, spd: 175, surge: 0.05, lines: ['*хрю*', 'john pork is calling', 'ты слабый'] },
   { id: 'haggord', name: 'Haggord', skin: 'assets/chars/haggord', push: 0.08, spd: 195, surge: 0.1, lines: ['yer a wizard', 'ХАХАХА', 'слабак'] },
-  { id: 'hazmat', name: 'арктический', skin: 'assets/chars/hazmat', push: 0.095, spd: 215, surge: 0.14, lines: ['...', 'дыши глубже', 'scrap мой'] },
-  { id: 'enemy', name: 'с района', skin: null, push: 0.11, spd: 235, surge: 0.18, lines: ['иди сюда', 'cyka', 'это мой барабан'] }
+  { id: 'hazmat', name: 'Arctic Hazmat', skin: 'assets/chars/hazmat', push: 0.095, spd: 215, surge: 0.14, lines: ['...', 'дыши глубже', 'scrap мой'] },
+  { id: 'enemy', name: 'guy from the block', skin: null, push: 0.11, spd: 235, surge: 0.18, lines: ['иди сюда', 'cyka', 'это мой барабан'] }
 ];
 
 export class Arm {
@@ -28,7 +28,7 @@ export class Arm {
     this.ui = document.createElement('div');
     this.ui.className = 'arm';
     this.ui.hidden = true;
-    this.ui.innerHTML = `<div class="arm-pick win"><div class="dlg-t"><span>армрестлинг</span><button class="x" data-x>x</button></div><div class="arm-list"></div></div>
+    this.ui.innerHTML = `<div class="arm-pick win"><div class="dlg-t"><span>arm wrestling</span><button class="x" data-x>x</button></div><div class="arm-list"></div></div>
       <div class="arm-hud" hidden><div class="arm-names"><span class="a-me"></span><span class="a-vs">vs</span><span class="a-foe"></span></div>
       <div class="arm-bar"><i></i><b></b></div><div class="arm-dials"><canvas class="d1" width="180" height="180"></canvas><canvas class="d2" width="180" height="180" hidden></canvas></div>
       <div class="arm-tip"></div><div class="arm-big" hidden></div></div>`;
@@ -59,8 +59,8 @@ export class Arm {
     this.$('.arm-hud').hidden = true;
     const st = this.stats();
     const list = this.$('.arm-list');
-    list.innerHTML = FOES.map((f, i) => `<button class="arm-foe" data-i="${i}"><b>${f.name}</b><span>${'💪'.repeat(i + 1)}</span><em>${st[f.id] ? st[f.id].w + '-' + st[f.id].l : 'не играли'}</em></button>`).join('') +
-      `<button class="arm-foe" data-i="friend"><b>с другом (один комп)</b><span>space vs enter</span><em></em></button>`;
+    list.innerHTML = FOES.map((f, i) => `<button class="arm-foe" data-i="${i}"><b>${f.name}</b><span>${'💪'.repeat(i + 1)}</span><em>${st[f.id] ? st[f.id].w + '-' + st[f.id].l : 'never played'}</em></button>`).join('') +
+      `<button class="arm-foe" data-i="friend"><b>vs a friend (same computer)</b><span>space vs enter</span><em></em></button>`;
     list.querySelectorAll('button').forEach(b => b.onclick = () => this.start(b.dataset.i === 'friend' ? 'friend' : FOES[+b.dataset.i]));
   }
 
@@ -76,15 +76,15 @@ export class Arm {
   async start(foe) {
     const friend = foe === 'friend';
     const me = this.w.opts.skin || 'sas';
-    const f = friend ? { id: 'friend', name: 'игрок 2', skin: me === 'phoenix' ? 'sas' : 'phoenix', push: 0, spd: 170, surge: 0, lines: [] } : { ...foe, skin: foe.skin || (me === 'phoenix' ? 'sas' : 'phoenix') };
+    const f = friend ? { id: 'friend', name: 'player 2', skin: me === 'phoenix' ? 'sas' : 'phoenix', push: 0, spd: 170, surge: 0, lines: [] } : { ...foe, skin: foe.skin || (me === 'phoenix' ? 'sas' : 'phoenix') };
     await this.foe.load(f.skin);
     this.foe.play('Idle_Loop');
     this.$('.arm-pick').hidden = true;
     this.$('.arm-hud').hidden = false;
-    this.$('.a-me').textContent = friend ? 'игрок 1' : 'ты';
+    this.$('.a-me').textContent = friend ? 'player 1' : 'you';
     this.$('.a-foe').textContent = f.name;
     this.$('.d2').hidden = !friend;
-    this.$('.arm-tip').textContent = friend ? 'игрок 1 жмёт space, игрок 2 жмёт enter, когда стрелка в зелёном' : 'жми space (или клик) когда стрелка в зелёном';
+    this.$('.arm-tip').textContent = friend ? 'player 1 hits space, player 2 hits enter, when the arrow is in the green' : 'hit space (or click) when the arrow is in the green';
     this.$('.arm-big').hidden = true;
     const dial = (spd) => ({ a: Math.random() * 360, dir: 1, spd, z: 0, zw: 70, flash: 0, combo: 0 });
     this.m = { f, friend, v: 0, t: 0, d: [dial(f.spd), dial(f.spd)], over: false, count: 2.2, surge: 0, shake: 0 };
@@ -159,7 +159,7 @@ export class Arm {
     }
     const big = this.$('.arm-big');
     big.hidden = false;
-    big.textContent = m.friend ? (won ? 'игрок 1 победил' : 'игрок 2 победил') : won ? 'ПОБЕДА' : 'проиграл лол';
+    big.textContent = m.friend ? (won ? 'player 1 wins' : 'player 2 wins') : won ? 'YOU WIN' : 'you lost lol';
     this.w.say(won ? ['изи', 'сука да', 'кто следующий'] : ['рука болит блять', 'он читер', 'реванш']);
     won ? this.w.opts.sfx?.ok?.() : this.w.opts.sfx?.fail?.();
     setTimeout(() => {

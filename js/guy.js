@@ -673,7 +673,7 @@ export class Guy {
     if (!b) {
       b = document.createElement('button');
       b.className = 'comeback';
-      b.textContent = 'вернись сюда';
+      b.innerHTML = 'вернись сюда<small>(come back)</small>';
       document.body.append(b);
       b.onclick = () => {
         if (b.classList.contains('boom')) return;

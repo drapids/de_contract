@@ -538,3 +538,4 @@ body.dragging-guy, body.dragging-guy * { cursor: url(../assets/ui/cur_aim.png) 1
 .cout.pos em b { color: var(--green); }
 .cout.neg em b { color: var(--red); }
 #c-out .summary { grid-template-columns: repeat(4, 1fr); }
+.comeback small { display: block; font: 11px Verdana, sans-serif; text-align: center; }

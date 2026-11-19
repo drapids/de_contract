@@ -35,7 +35,7 @@ export class World {
     this.canvas.className = 'world-gl';
     this.ui = document.createElement('div');
     this.ui.className = 'world-ui';
-    this.ui.innerHTML = `<div class="w-where"></div><div class="w-prompt" hidden></div><div class="w-say" hidden></div><div class="w-hint">wasd ходить · shift бежать · тащи мышкой чтобы крутить · e юзать</div><div class="w-fade"></div>`;
+    this.ui.innerHTML = `<div class="w-where"></div><div class="w-prompt" hidden></div><div class="w-say" hidden></div><div class="w-hint">wasd walk · shift run · drag mouse to look · e use · i inventory · b phrasebook</div><div class="w-fade"></div>`;
     host.append(this.canvas, this.ui);
     this.$ = s => this.ui.querySelector(s);
     this.match = null;
@@ -128,7 +128,7 @@ export class World {
 
   async buildBasement() {
     const t = this.t, H = 2.6, X0 = -4, X1 = 4, Z0 = -3, Z1 = 3;
-    const sc = this.scenes.basement = { name: 'подвал', items: [], col: [], acts: [], bounds: [X0, X1, Z0, Z1, H], amb: [0.1, 0.1, 0.11], fog: [0.02, 0.022, 0.02], fogR: [5, 14], spawn: [0.6, 0, 1.6, Math.PI], cam: 2.3 };
+    const sc = this.scenes.basement = { name: 'basement', items: [], col: [], acts: [], bounds: [X0, X1, Z0, Z1, H], amb: [0.1, 0.1, 0.11], fog: [0.02, 0.022, 0.02], fogR: [5, 14], spawn: [0.6, 0, 1.6, Math.PI], cam: 2.3 };
     this.shape(sc, floorQ(X0, Z0, X1, Z1, 0, 1.6), t.concrete);
     this.shape(sc, floorQ(X0, Z0, X1, Z1, H, 1.6, true), t.ceiling);
     this.shape(sc, merge(wallQ(X0, Z0, X1, Z0, 0, H, 1.3, [0, 0, 1]), wallQ(X1, Z1, X0, Z1, 0, H, 1.3, [0, 0, -1]), wallQ(X0, Z1, X0, Z0, 0, H, 1.3, [1, 0, 0]), wallQ(X1, Z0, X1, Z1, 0, H, 1.3, [-1, 0, 0])), t.wall);
@@ -143,13 +143,13 @@ export class World {
     this.crtScreen = this.shape(sc, poly([[-3.53, 0.86, -2.38], [-3.13, 0.86, -2.38], [-3.13, 1.17, -2.38], [-3.53, 1.17, -2.38]], [0, 0, 1], [[0, 1], [1, 1], [1, 0], [0, 0]]), this.screenT, [1, 1, 1, 1], { emit: 1.2, unlit: 1 });
     await this.put(sc, 'chips', -2.9, 0.765, -2.42, 0.4, 0.9);
     this.shape(sc, merge(boxG(0.36, 0.04, 0.36, -3.1, 0.46, -1.8), boxG(0.04, 0.44, 0.04, -3.1, 0.22, -1.8)), t.wood);
-    sc.acts.push({ p: [-3.25, 1, -2.2], r: 1.35, label: 'залезть в терминал', act: () => this.terminal() });
+    sc.acts.push({ p: [-3.25, 1, -2.2], r: 1.35, label: 'use the terminal (trade ups)', act: () => this.terminal() });
 
     this.shape(sc, merge(boxG(2.1, 0.42, 0.85, 0.3, 0.21, -2.55), boxG(2.1, 0.55, 0.22, 0.3, 0.6, -2.88), boxG(0.22, 0.62, 0.85, -0.86, 0.31, -2.55), boxG(0.22, 0.62, 0.85, 1.46, 0.31, -2.55)), t.fabric);
     this.solid(sc, -0.95, -3, 1.55, -2.1, 0.9);
     await this.put(sc, 'rug0', 0.3, 1.75, -2.985, 0, 1.55, M4.mul(rotX(90 * D), M4.fromQT(Q.axis([0, 1, 0], 90 * D), [0, 0, 0])));
     await this.put(sc, 'rug1', 0.4, 0.002, -0.6, 90 * D, 1.6);
-    sc.acts.push({ p: [0.3, 0.5, -2.3], r: 1.1, label: 'посидеть', act: () => this.sit([0.3, 0, -2.45]) });
+    sc.acts.push({ p: [0.3, 0.5, -2.3], r: 1.1, label: 'sit', act: () => this.sit([0.3, 0, -2.45]) });
 
     await this.put(sc, 'radiator', -3.88, 0.12, 0.3, 0, 1);
     this.solid(sc, -4, -0.3, -3.75, 0.9, 0.75);
@@ -158,11 +158,11 @@ export class World {
 
     await this.put(sc, 'vending', 3.35, 0, -2.35, -90 * D, 1);
     this.solid(sc, 2.8, -3, 3.95, -1.7);
-    sc.acts.push({ p: [3.2, 1, -1.6], r: 1.3, label: 'автомат', act: () => this.loot.open('vend') });
+    sc.acts.push({ p: [3.2, 1, -1.6], r: 1.3, label: 'vending machine', act: () => this.loot.open('vend') });
 
     this.shape(sc, merge(boxG(0.9, 0.04, 0.3, 3.84, 1.5, 1.2), boxG(0.04, 0.2, 0.04, 3.95, 1.4, 0.85), boxG(0.04, 0.2, 0.04, 3.95, 1.4, 1.55)), t.wood);
     await this.put(sc, 'mexi', 3.82, 1.52, 1.2, -90 * D, 0.7);
-    sc.acts.push({ p: [3.6, 1.5, 1.2], r: 1.2, label: 'погладить', act: () => this.say(['хороший мальчик', 'кто это вообще', 'он смотрит на меня']) });
+    sc.acts.push({ p: [3.6, 1.5, 1.2], r: 1.2, label: 'pet', act: () => this.say(['хороший мальчик', 'кто это вообще', 'он смотрит на меня']) });
 
     this.shape(sc, merge(boxG(1.1, 0.06, 1.1, 1.6, 0.74, 1.0), boxG(0.12, 0.72, 0.12, 1.6, 0.36, 1.0), boxG(0.6, 0.04, 0.6, 1.6, 0.02, 1.0)), t.wood);
     this.solid(sc, 1.1, 0.5, 2.1, 1.5, 0.8);
@@ -174,7 +174,7 @@ export class World {
     for (let i = 0; i < 6; i++) this.shape(sc, boxG(0.09, 0.004, 0.13, 1.35 + (i % 3) * 0.12, 0.775 + i * 0.002, 0.72 + (i > 2 ? 0.55 : 0)), cb);
     this.shape(sc, boxG(0.09, 0.004, 0.13, 1.62, 0.778, 1.0), ct);
     this.shape(sc, boxG(0.09, 0.03, 0.13, 1.85, 0.79, 1.15), cb);
-    sc.acts.push({ p: [1.6, 0.8, 1.0], r: 1.3, label: 'дурак', act: () => this.game('durak') });
+    sc.acts.push({ p: [1.6, 0.8, 1.0], r: 1.3, label: 'durak (cards)', act: () => this.game('durak') });
 
     this.shape(sc, merge(boxG(0.7, 0.06, 0.7, -1.8, 0.7, 1.6), boxG(0.5, 0.68, 0.5, -1.8, 0.34, 1.6)), t.rust);
     this.solid(sc, -2.15, 0.58, -1.45, 2.62, 0.8);
@@ -182,17 +182,17 @@ export class World {
     this.shape(sc, boxG(0.008, 0.62, 0.008, -1.8, 2.29, 1.6), t.pipe);
     sc.items.push({ obj: this.e.shape(boxG(0.06, 0.08, 0.06, -1.8, 1.95, 1.6), null, [1, 0.85, 0.55, 1]), m: M4.id(), o: { unlit: 1 } });
     this.shape(sc, merge(boxG(0.34, 0.42, 0.34, -1.8, 0.21, 0.75), boxG(0.34, 0.42, 0.34, -1.8, 0.21, 2.45)), t.wood);
-    sc.acts.push({ p: [-1.8, 0.8, 1.6], r: 1.2, label: 'шахматы', act: () => this.game('chess') });
+    sc.acts.push({ p: [-1.8, 0.8, 1.6], r: 1.2, label: 'chess', act: () => this.game('chess') });
 
     const B = this.barrel = [-0.4, 0, 1.75];
     this.shape(sc, merge(boxG(0.56, 0.93, 0.56, B[0], 0.465, B[2]), boxG(0.62, 0.05, 0.62, B[0], 0.2, B[2]), boxG(0.62, 0.05, 0.62, B[0], 0.75, B[2])), t.rust);
     this.solid(sc, B[0] - 0.3, B[2] - 0.3, B[0] + 0.3, B[2] + 0.3, 0.98);
     this.shape(sc, boxG(0.5, 0.03, 0.5, B[0], 0.945, B[2]), t.wood);
-    sc.acts.push({ p: [B[0], 1, B[2]], r: 1.2, label: 'армрестлинг', act: () => this.arm.open() });
+    sc.acts.push({ p: [B[0], 1, B[2]], r: 1.2, label: 'arm wrestling', act: () => this.arm.open() });
 
     this.shape(sc, poly([[2.2, 0, 2.985], [3.2, 0, 2.985], [3.2, 2.05, 2.985], [2.2, 2.05, 2.985]], [0, 0, -1], [[0, 1], [1, 1], [1, 0], [0, 0]]), t.door);
     this.shape(sc, merge(boxG(1.12, 0.08, 0.06, 2.7, 2.09, 2.97), boxG(0.06, 2.1, 0.06, 2.17, 1.05, 2.97), boxG(0.06, 2.1, 0.06, 3.23, 1.05, 2.97)), t.wood);
-    sc.acts.push({ p: [2.7, 1, 2.7], r: 1.1, label: 'во двор', act: () => this.travel('yard', [1.5, 0, -6.2, 0]) });
+    sc.acts.push({ p: [2.7, 1, 2.7], r: 1.1, label: 'go outside', act: () => this.travel('yard', [1.5, 0, -6.2, 0]) });
 
     this.tube = this.e.shape(merge(boxG(1.2, 0.05, 0.05, 0, 2.5, -0.2), boxG(0.03, 0.1, 0.03, -0.5, 2.56, -0.2), boxG(0.03, 0.1, 0.03, 0.5, 2.56, -0.2)), null, [1, 1, 0.92, 1]);
     sc.items.push({ obj: this.tube, m: M4.id(), o: { unlit: 1 }, tube: true });
@@ -207,7 +207,7 @@ export class World {
 
   async buildYard() {
     const t = this.t, X0 = -12, X1 = 12, Z0 = -9, Z1 = 9;
-    const sc = this.scenes.yard = { name: 'двор', items: [], col: [], acts: [], bounds: [X0, X1, Z0, Z1, 30], amb: [0.5, 0.52, 0.55], fog: [0.62, 0.66, 0.7], fogR: [10, 34], spawn: [1.5, 0, -6.2, 0], cam: 3.6, sky: true };
+    const sc = this.scenes.yard = { name: 'yard', items: [], col: [], acts: [], bounds: [X0, X1, Z0, Z1, 30], amb: [0.5, 0.52, 0.55], fog: [0.62, 0.66, 0.7], fogR: [10, 34], spawn: [1.5, 0, -6.2, 0], cam: 3.6, sky: true };
     this.shape(sc, floorQ(-40, -40, 40, 40, 0, 3), t.asphalt);
     this.shape(sc, merge(floorQ(-11, 3.5, -4, 8.5, 0.01, 2), floorQ(5, -8.5, 11, -4.5, 0.01, 2)), t.dirt);
     this.solid(sc, -99, -99, 99, Z0); this.solid(sc, -99, Z1, 99, 99); this.solid(sc, -99, -99, X0, 99); this.solid(sc, X1, -99, 99, 99);
@@ -231,11 +231,11 @@ export class World {
     this.shape(sc, merge(boxG(2.4, 2.4, 1.6, 1.5, 1.2, -8.2), boxG(2.6, 0.12, 1.9, 1.5, 2.46, -8.1)), t.brick);
     this.shape(sc, poly([[1.0, 0, -7.39], [2.0, 0, -7.39], [2.0, 2.0, -7.39], [1.0, 2.0, -7.39]], [0, 0, 1], [[0, 1], [1, 1], [1, 0], [0, 0]]), t.door);
     this.solid(sc, 0.3, -9, 2.7, -7.4, 2.6);
-    sc.acts.push({ p: [1.5, 1, -7.1], r: 1.3, label: 'в подвал', act: () => this.travel('basement', [2.7, 0, 2.3, Math.PI]) });
+    sc.acts.push({ p: [1.5, 1, -7.1], r: 1.3, label: 'go to the basement', act: () => this.travel('basement', [2.7, 0, 2.3, Math.PI]) });
 
     await this.put(sc, 'lada', -4.5, 0, -2.5, 75 * D, 1);
     this.solid(sc, -6.4, -3.4, -2.6, -1.6, 1.4);
-    sc.acts.push({ p: [-4.5, 0.8, -2.5], r: 2.6, label: 'посигналить', act: () => this.honk() });
+    sc.acts.push({ p: [-4.5, 0.8, -2.5], r: 2.6, label: 'honk', act: () => this.honk() });
 
     for (let i = 0; i < 5; i++) {
       const x = 4.2 + i * 1.6;
@@ -245,7 +245,7 @@ export class World {
 
     this.shape(sc, merge(boxG(1.8, 0.06, 0.45, -6.5, 0.45, 4.4), boxG(1.8, 0.4, 0.06, -6.5, 0.7, 4.62), boxG(0.08, 0.45, 0.4, -7.3, 0.22, 4.4), boxG(0.08, 0.45, 0.4, -5.7, 0.22, 4.4)), t.wood);
     this.solid(sc, -7.4, 4.15, -5.6, 4.7, 0.9);
-    sc.acts.push({ p: [-6.5, 0.5, 4.2], r: 1.2, label: 'посидеть', act: () => this.sit([-6.5, 0, 4.35]) });
+    sc.acts.push({ p: [-6.5, 0.5, 4.2], r: 1.2, label: 'sit', act: () => this.sit([-6.5, 0, 4.35]) });
 
     this.shape(sc, merge(boxG(0.14, 5, 0.14, 4, 2.5, -3), boxG(1.1, 0.1, 0.14, 3.5, 5, -3), boxG(0.4, 0.12, 0.3, 3.0, 4.92, -3)), t.pipe);
     this.solid(sc, 3.85, -3.15, 4.15, -2.85, 5);
@@ -258,17 +258,17 @@ export class World {
     const hz = new Avatar(this.e);
     hz.load('assets/chars/hazmat').then(() => { hz.play('Idle_FoldArms_Loop'); hz.pos = [8.6, 0, 4.2]; hz.yaw = Math.PI * 0.95; this.npcs.push({ av: hz, scene: 'yard' }); }).catch(() => {});
     this.solid(sc, 8.3, 3.9, 8.9, 4.5, 2);
-    sc.acts.push({ p: [8.6, 1.2, 4.0], r: 1.4, label: 'скупка (хазмат)', act: () => { this.say(['чё продаёшь', 'скрап есть скрап']); this.loot.inventory(); } });
+    sc.acts.push({ p: [8.6, 1.2, 4.0], r: 1.4, label: 'sell skins for scrap', act: () => { this.say(['чё продаёшь', 'скрап есть скрап']); this.loot.inventory(); } });
     this.wheel.draw();
     const wg = this.e.texCanvas(this.wheel.cv);
     this.shape(sc, merge(boxG(0.12, 1.1, 0.12, 6.7, 0.55, 4.4), boxG(1.5, 0.1, 0.5, 6.7, 0.05, 4.4)), t.rust);
     this.shape(sc, poly([[7.35, 0.75, 4.32], [6.05, 0.75, 4.32], [6.05, 2.05, 4.32], [7.35, 2.05, 4.32]], [0, 0, -1], [[0, 1], [1, 1], [1, 0], [0, 0]]), wg);
     this.solid(sc, 5.95, 4.15, 7.45, 4.65, 2.1);
-    sc.acts.push({ p: [6.7, 1.3, 4.1], r: 1.5, label: 'колесо', act: () => this.wheel.open() });
+    sc.acts.push({ p: [6.7, 1.3, 4.1], r: 1.5, label: 'scrap wheel', act: () => this.wheel.open() });
     this.dropAt = [-1.5, 0, 2.2];
     this.drop = this.e.shape(merge(boxG(0.9, 0.6, 0.9, 0, 0.3, 0), boxG(0.95, 0.08, 0.95, 0, 0.62, 0), boxG(0.06, 0.66, 0.95, 0.47, 0.33, 0), boxG(0.06, 0.66, 0.95, -0.47, 0.33, 0)), this.e.texCanvas(paint(32, 32, (x) => { x.fillStyle = '#3a5f8a'; x.fillRect(0, 0, 32, 32); x.fillStyle = '#e8e2c8'; x.fillRect(0, 13, 32, 6); x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(0, 0, 32, 2); })));
     this.smoke = this.e.shape(boxG(0.25, 0.25, 0.25), null, [0.35, 0.9, 0.4, 1]);
-    sc.acts.push({ p: [this.dropAt[0], 0.7, this.dropAt[2]], r: 1.4, label: 'открыть аирдроп', cond: () => this.bank.dropReady(), act: () => this.claimDrop() });
+    sc.acts.push({ p: [this.dropAt[0], 0.7, this.dropAt[2]], r: 1.4, label: 'open airdrop', cond: () => this.bank.dropReady(), act: () => this.claimDrop() });
     this.chicken = { pos: [2, 0, 3], yaw: 0, tgt: [2, 0, 3], fly: 0, vy: 0, t: 0 };
     this.chickenObj = {
       body: this.e.shape(merge(boxG(0.18, 0.16, 0.26, 0, 0.26, 0), boxG(0.12, 0.14, 0.11, 0, 0.38, 0.12), boxG(0.06, 0.1, 0.04, 0, 0.3, -0.15)), null, [0.93, 0.92, 0.86, 1]),
@@ -276,7 +276,7 @@ export class World {
       beak: this.e.shape(boxG(0.04, 0.03, 0.05, 0, 0.39, 0.2), null, [0.9, 0.6, 0.1, 1]),
       legs: this.e.shape(merge(boxG(0.02, 0.18, 0.02, 0.05, 0.09, 0), boxG(0.02, 0.18, 0.02, -0.05, 0.09, 0)), null, [0.9, 0.6, 0.1, 1])
     };
-    sc.acts.push({ p: this.chicken.pos, r: 1.0, label: 'пнуть курицу', cond: () => !this.chicken.fly, act: () => this.kickChicken() });
+    sc.acts.push({ p: this.chicken.pos, r: 1.0, label: 'kick the chicken', cond: () => !this.chicken.fly, act: () => this.kickChicken() });
     sc.lights = (now, night) => night
       ? [{ pos: [3.0, 4.6, -3], color: [1, 0.78, 0.45], r: 11, k: 1.4 }, { pos: [1.5, 2.6, -7.2], color: [0.9, 0.85, 0.6], r: 4, k: 0.9 }]
       : [{ pos: [0, 30, 0], color: [1, 0.97, 0.9], r: 80, k: 0.7 }];
@@ -297,7 +297,7 @@ export class World {
     if (cr.length && Math.random() < 0.35) {
       const it = this.loot.roll(cr[Math.random() * cr.length | 0]);
       this.bank.s.inv.push(it); this.bank.save();
-      this.say('в аирдропе был скин: ' + it.hash.replace(/ \(.*\)$/, ''), 3500);
+      this.say('airdrop had a skin: ' + it.hash.replace(/ \(.*\)$/, ''), 3500);
     } else this.say(['аирдроп мой', 'халява', 'спасибо самолёт']);
     this.opts.sfx?.ok?.();
   }
@@ -636,7 +636,7 @@ export class World {
       if (score < bd) { bd = score; best = a; }
     }
     this.near = best;
-    const tgt = best || (this.seated ? { label: 'встать', p: [av.pos[0], 1.2, av.pos[2]] } : null);
+    const tgt = best || (this.seated ? { label: 'stand up', p: [av.pos[0], 1.2, av.pos[2]] } : null);
     if (!tgt) { p.hidden = true; } else {
       const s = this.e.project([tgt.p[0], tgt.p[1] + 0.35, tgt.p[2]]);
       if (!s) { p.hidden = true; } else {

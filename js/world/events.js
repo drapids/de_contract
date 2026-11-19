@@ -31,7 +31,7 @@ export class Events {
     const mk = document.createElement('div');
     mk.className = 'nmarket';
     mk.hidden = true;
-    mk.innerHTML = `<div class="nm-win"><div class="nm-t"><b>НОЧНОЙ РЫНОК</b><span class="nm-left"></span><button class="x">x</button></div><p class="nm-sub">призрак продаёт пока он спит. каждую ночь новое. открывай карты</p><div class="nm-cards"></div></div>`;
+    mk.innerHTML = `<div class="nm-win"><div class="nm-t"><b>NIGHT MARKET</b><span class="nm-left"></span><button class="x">x</button></div><p class="nm-sub">the ghost sells stuff while he sleeps. new stock every night. flip the cards</p><div class="nm-cards"></div></div>`;
     w.ui.append(mk);
     this.mk = mk;
     mk.querySelector('.x').onclick = () => this.closeMarket();
@@ -56,7 +56,7 @@ export class Events {
     this.ghost = new Avatar(e);
     try { await this.ghost.load(me === 'phoenix' ? 'assets/agents/sas' : 'assets/agents/phoenix'); this.ghost.play('Idle_FoldArms_Loop'); this.ghost.pos = [2.75, 0, -1.25]; this.ghost.yaw = -Math.PI * 0.7; } catch (e) { this.ghost = null; }
     const sc = this.w.scenes.basement;
-    sc.acts.push({ p: [2.75, 1.2, -1.25], r: 1.4, label: 'ночной рынок', cond: () => this.marketOpen(), act: () => this.openMarket() });
+    sc.acts.push({ p: [2.75, 1.2, -1.25], r: 1.4, label: 'night market', cond: () => this.marketOpen(), act: () => this.openMarket() });
   }
 
   hour() { const d = new Date(); return d.getHours() + d.getMinutes() / 60; }
@@ -237,20 +237,20 @@ export class Events {
     this.ghost?.play('Idle_Talking_Loop');
     w.say(['пс. иди сюда', 'только сегодня', 'не говори ему'][Math.random() * 3 | 0], 1800);
     const c = this.mk.querySelector('.nm-cards');
-    if (!m) { c.innerHTML = '<p class="nm-sub">сегодня пусто. скинов нет</p>'; return; }
+    if (!m) { c.innerHTML = '<p class="nm-sub">nothing tonight. no skins loaded yet</p>'; return; }
     const h = this.hour(), left = h >= 21 ? 30 - h : h < 6 ? 6 - h : 0;
-    this.mk.querySelector('.nm-left').textContent = left > 0 ? 'закроется через ' + Math.floor(left) + 'ч ' + Math.floor(left % 1 * 60) + 'м' : '';
+    this.mk.querySelector('.nm-left').textContent = left > 0 ? 'closes in ' + Math.floor(left) + 'h ' + Math.floor(left % 1 * 60) + 'm' : '';
     c.innerHTML = m.items.map((it, i) => {
       const v = this.w.loot.value(it), price = Math.max(1, Math.round(v * (100 - it.off) / 100));
       const open = m.seen.includes(i), got = m.bought.includes(i);
-      return `<div class="nm-card ${open ? 'open' : ''} ${got ? 'got' : ''}" data-i="${i}" style="--c:${TIER_COLORS[it.r]}">${open ? `${it.img ? `<img src="${esc(it.img)}" alt="">` : ''}<b>${esc(short(it.hash))}</b><s>${v} ₽</s><em>-${it.off}%</em><button class="btn" ${got ? 'disabled' : ''}>${got ? 'куплено' : price + ' ₽'}</button>` : '<span>?</span>'}</div>`;
+      return `<div class="nm-card ${open ? 'open' : ''} ${got ? 'got' : ''}" data-i="${i}" style="--c:${TIER_COLORS[it.r]}">${open ? `${it.img ? `<img src="${esc(it.img)}" alt="">` : ''}<b>${esc(short(it.hash))}</b><s>${v} ₽</s><em>-${it.off}%</em><button class="btn" ${got ? 'disabled' : ''}>${got ? 'bought' : price + ' ₽'}</button>` : '<span>?</span>'}</div>`;
     }).join('');
     c.querySelectorAll('.nm-card').forEach(el => el.onclick = ev => {
       const i = +el.dataset.i;
       if (!m.seen.includes(i)) { m.seen.push(i); this.w.bank.save(); this.w.opts.sfx?.beep?.(true); this.openMarket(); return; }
       if (ev.target.closest('button') && !m.bought.includes(i)) {
         const it = m.items[i], price = Math.max(1, Math.round(this.w.loot.value(it) * (100 - it.off) / 100));
-        if (!this.w.bank.spend(price)) { this.w.say('денег нет'); return; }
+        if (!this.w.bank.spend(price)) { this.w.say('not enough rubles'); return; }
         m.bought.push(i);
         const { off, ...item } = it;
         this.w.bank.s.inv.push({ ...item, at: Date.now() });

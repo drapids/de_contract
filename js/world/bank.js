@@ -13,7 +13,7 @@ export class Bank {
     this.s = this.load();
     const el = this.el = document.createElement('div');
     el.className = 'bank';
-    el.innerHTML = `<div class="bk-row"><span class="bk-rub"></span><span class="bk-scrap"></span><button class="bk-inv" title="инвентарь (i)">инвентарь</button><button class="bk-inv bk-book" title="блятлинго (b)">блятлинго</button></div><div class="bk-rank"></div><div class="bk-drop"><i></i><span></span></div>`;
+    el.innerHTML = `<div class="bk-row"><span class="bk-rub"></span><span class="bk-scrap"></span><button class="bk-inv" title="inventory (i)">inventory</button><button class="bk-inv bk-book" title="blyatlingo (b)">blyatlingo</button></div><div class="bk-rank"></div><div class="bk-drop"><i></i><span></span></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('.bk-inv').onclick = () => !w.busy && w.loot?.inventory();
@@ -40,7 +40,7 @@ export class Bank {
     this.save();
     if (rub || scrap) this.pop((rub ? (rub > 0 ? '+' : '') + rub + ' ₽ ' : '') + (scrap ? (scrap > 0 ? '+' : '') + scrap + ' scrap' : ''));
     const after = this.rank();
-    if (after > before) setTimeout(() => { this.w.say('новое звание: ' + RANKS[after], 3500); this.w.opts.sfx?.dubs?.(); }, 900);
+    if (after > before) setTimeout(() => { this.w.say('rank up: ' + RANKS[after], 3500); this.w.opts.sfx?.dubs?.(); }, 900);
   }
 
   spend(rub = 0, scrap = 0) {
@@ -69,14 +69,14 @@ export class Bank {
 
   render() {
     const s = this.s, r = this.rank();
-    this.$('.bk-rub').textContent = s.rub.toLocaleString('ru-RU') + ' ₽';
+    this.$('.bk-rub').textContent = s.rub.toLocaleString('en-US') + ' ₽';
     this.$('.bk-scrap').textContent = s.scrap + ' scrap';
     const nx = RANK_XP[r + 1];
     this.$('.bk-rank').innerHTML = `<b>${RANKS[r]}</b>${nx ? ` <span>${s.xp}/${nx} xp</span>` : ''}`;
     const k = Math.min(1, (Date.now() - s.drop) / DAY);
     this.$('.bk-drop i').style.width = (k * 100) + '%';
     const left = DAY - (Date.now() - s.drop);
-    this.$('.bk-drop span').textContent = k >= 1 ? 'аирдроп во дворе!' : 'аирдроп через ' + Math.floor(left / 3600000) + 'ч ' + Math.floor(left / 60000 % 60) + 'м';
+    this.$('.bk-drop span').textContent = k >= 1 ? 'airdrop is in the yard!' : 'airdrop in ' + Math.floor(left / 3600000) + 'h ' + Math.floor(left / 60000 % 60) + 'm';
     this.el.classList.toggle('ready', k >= 1);
   }
 }

@@ -2,7 +2,7 @@ import { Avatar } from './avatar.js';
 import { FOES } from './arm.js';
 
 const SUITS = ['♠', '♣', '♥', '♦'];
-const RANKS = ['6', '7', '8', '9', '10', 'В', 'Д', 'К', 'Т'];
+const RANKS = ['6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const red = s => s === '♥' || s === '♦';
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const SMART = { quandale: 0.35, pork: 0.55, haggord: 0.7, hazmat: 0.85, enemy: 0.95 };
@@ -22,16 +22,16 @@ export class Durak {
     const el = this.el = document.createElement('div');
     el.className = 'durak';
     el.hidden = true;
-    el.innerHTML = `<div class="dk-pick win"><div class="dlg-t"><span>дурак</span><button class="x" data-x>x</button></div><div class="dk-list"></div></div>
+    el.innerHTML = `<div class="dk-pick win"><div class="dlg-t"><span>durak</span><button class="x" data-x>x</button></div><div class="dk-list"></div></div>
       <div class="dk-table" hidden>
         <div class="dk-top"><span class="dk-foe"></span><div class="dk-ohand"></div></div>
         <div class="dk-mid"><div class="dk-deck"><div class="dk-trump"></div><div class="dk-pile"></div><b class="dk-left"></b></div><div class="dk-pairs"></div><div class="dk-bito"></div></div>
         <div class="dk-msg"></div>
-        <div class="dk-me"><div class="dk-hand"></div><div class="dk-btns"><button class="btn" data-a="pass">бито</button><button class="btn" data-a="take">беру</button><button class="btn" data-a="quit">выйти</button></div></div>
+        <div class="dk-me"><div class="dk-hand"></div><div class="dk-btns"><button class="btn" data-a="pass">done</button><button class="btn" data-a="take">take</button><button class="btn" data-a="quit">leave</button></div></div>
         <div class="dk-big" hidden></div>
       </div>
-      <div class="w98" hidden><div class="w98-t"><span>как_играть_в_дурака.txt - Блокнот</span><button data-ok>×</button></div><div class="w98-m">Файл&nbsp;&nbsp;Правка&nbsp;&nbsp;Формат&nbsp;&nbsp;Вид&nbsp;&nbsp;Справка</div><pre class="w98-b"></pre><div class="w98-f"><button data-ok>OK</button></div></div>
-      <div class="scam" hidden><div class="scam-bar"><span>12:47</span><span>▂▄▆ 3G ▮▮▯</span></div><div class="scam-x">x</div><div class="scam-b"><div class="scam-h">ПОЗДРАВЛЯЕМ!!!</div><div class="scam-s">вы 1000000-й игрок в дурака</div><div class="scam-p">DURAK PRO 2009<br><small>без вирусов 100%</small></div><div class="scam-st">★★★★★ (9 999 отзывов)</div><button class="scam-go">DOWNLOAD &gt;</button><div class="scam-prog" hidden><i></i></div><div class="scam-f">реклама · <u>отключить рекламу</u></div></div></div>`;
+      <div class="w98" hidden><div class="w98-t"><span>how_to_play_durak.txt - Notepad</span><button data-ok>×</button></div><div class="w98-m">File&nbsp;&nbsp;Edit&nbsp;&nbsp;Format&nbsp;&nbsp;View&nbsp;&nbsp;Help</div><pre class="w98-b"></pre><div class="w98-f"><button data-ok>OK</button></div></div>
+      <div class="scam" hidden><div class="scam-bar"><span>12:47</span><span>▂▄▆ 3G ▮▮▯</span></div><div class="scam-x">x</div><div class="scam-b"><div class="scam-h">CONGRATULATIONS!!!</div><div class="scam-s">you are the 1,000,000th durak player</div><div class="scam-p">DURAK PRO 2009<br><small>100% no viruses</small></div><div class="scam-st">★★★★★ (9,999 reviews)</div><button class="scam-go">DOWNLOAD &gt;</button><div class="scam-prog" hidden><i></i></div><div class="scam-f">ad · <u>remove ads</u></div></div></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('[data-x]').onclick = () => this.close();
@@ -42,29 +42,31 @@ export class Durak {
     this.$('[data-a=take]').onclick = () => this.take();
     this.$('[data-a=quit]').onclick = () => this.open();
     addEventListener('keydown', e => { if (this.on && e.key === 'Escape') this.close(); });
-    this.$('.w98-b').textContent = `ДУРАК (подкидной)
+    this.$('.w98-b').textContent = `DURAK (the russian card game)
 
-колода 36 карт, от шестёрки до туза.
-нижняя карта колоды = козырь.
+36 card deck, 6 up to ace.
+the card under the deck = TRUMP suit.
 
-у всех по 6 карт. первым ходит у кого
-самый маленький козырь.
+everyone gets 6 cards. whoever has the
+lowest trump goes first.
 
-ходишь картой -> он отбивается картой
-той же масти но старше, или козырем.
-можно подкидывать карты того же
-достоинства что уже лежат на столе.
+you attack by playing a card. he has to
+beat it with a higher card of the SAME
+suit, or with any trump.
+you can throw in more cards if they
+match a rank already on the table.
 
-не может отбиться -> берёт всё.
-отбился -> "бито", карты в сброс,
-теперь ходит он.
+cant beat it -> he picks up everything.
+beat it all -> you hit "done", the cards
+get discarded and now he attacks.
 
-после хода все добирают до 6.
-колода кончилась и у тебя нет карт
-= ты выиграл. последний с картами
-= ДУРАК.
+after every round you both draw back up
+to 6. once the deck runs out, whoever
+gets rid of all their cards first wins.
+the last one holding cards is the DURAK
+(the fool).
 
-				- не потеряй этот файл`;
+				- dont lose this file`;
   }
 
   stats() { try { return JSON.parse(localStorage.getItem('dc.durak')) || {}; } catch { return {}; } }
@@ -78,7 +80,7 @@ export class Durak {
     this.$('.dk-pick').hidden = false;
     this.$('.dk-table').hidden = true;
     const st = this.stats();
-    this.$('.dk-list').innerHTML = FOES.map((f, i) => `<button class="arm-foe" data-i="${i}"><b>${f.name}</b><span>${'🃏'.repeat(i + 1)}</span><em>${st[f.id] ? st[f.id].w + '-' + st[f.id].l : 'не играли'}</em></button>`).join('');
+    this.$('.dk-list').innerHTML = FOES.map((f, i) => `<button class="arm-foe" data-i="${i}"><b>${f.name}</b><span>${'🃏'.repeat(i + 1)}</span><em>${st[f.id] ? st[f.id].w + '-' + st[f.id].l : 'never played'}</em></button>`).join('');
     this.$('.dk-list').querySelectorAll('button').forEach(b => b.onclick = () => this.start(FOES[+b.dataset.i]));
     let seen = false;
     try { seen = !!localStorage.getItem('dc.durakHelp'); } catch {}
@@ -104,10 +106,10 @@ export class Durak {
       bar.style.width = Math.min(p, 100) + '%';
       if (p >= 100) {
         clearInterval(t);
-        this.$('.scam-b').innerHTML = '<div class="scam-h">ошибка</div><div class="scam-s">файл durak_pro_2009.apk.exe не найден</div><div class="scam-p" style="font-size:30px">ты дурак</div>';
+        this.$('.scam-b').innerHTML = '<div class="scam-h">ERROR</div><div class="scam-s">durak_pro_2009.apk.exe not found</div><div class="scam-p" style="font-size:30px">ты дурак<br><small style="font-size:13px">(you\'re the fool)</small></div>';
         this.w.say(['ахахах', 'ты реально нажал', 'дурак']);
         const big = this.$('.dk-big');
-        if (this.g) { big.hidden = false; big.textContent = 'ты дурак'; setTimeout(() => { if (!this.g?.over) big.hidden = true; }, 2000); }
+        if (this.g) { big.hidden = false; big.textContent = 'ты дурак (you\'re the fool)'; setTimeout(() => { if (!this.g?.over) big.hidden = true; }, 2000); }
         setTimeout(() => this.$('.scam').hidden = true, 2600);
       }
     }, 120);
@@ -128,7 +130,7 @@ export class Durak {
     this.$('.dk-table').hidden = false;
     this.$('.dk-big').hidden = true;
     this.$('.dk-foe').textContent = f.name;
-    this.msg(g.att === 'me' ? 'твой ход' : `${f.name} ходит первым`);
+    this.msg(g.att === 'me' ? 'your turn, play a card' : `${f.name} goes first`);
     this.render();
     if (g.att === 'ai') this.aiTurn();
   }
@@ -162,7 +164,7 @@ export class Durak {
     this.$('.dk-trump').innerHTML = g.deck.length ? this.card(g.trumpCard) : `<div class="card ghost"><b>${g.trump}</b></div>`;
     this.$('.dk-pile').innerHTML = g.deck.length > 1 ? '<div class="card back"></div>' : '';
     this.$('.dk-left').textContent = g.deck.length || '';
-    this.$('.dk-bito').innerHTML = g.bito ? `<div class="card back"></div><span>бито ${g.bito}</span>` : '';
+    this.$('.dk-bito').innerHTML = g.bito ? `<div class="card back"></div><span>discard ${g.bito}</span>` : '';
     this.$('.dk-hand').querySelectorAll('.card').forEach(el => el.onclick = () => this.play(el.dataset.id));
     const myAtt = g.att === 'me';
     this.$('[data-a=pass]').disabled = !(myAtt && g.table.length && (g.table.every(p => p.d) || g.taking) && !g.busy && !g.over);
@@ -213,24 +215,24 @@ export class Durak {
       if (pick && Math.random() > 0.25 + g.smart) pick = opts[opts.length - 1];
       if (!pick) {
         g.taking = true;
-        this.msg(`${g.f.name}: беру`);
+        this.msg(`${g.f.name} takes`);
         g.busy = false; this.render();
         await wait(300);
-        this.msg('можешь подкинуть ещё, потом жми бито');
+        this.msg('you can throw in more cards, then hit done');
         return;
       }
       g.ai.splice(g.ai.indexOf(pick), 1);
       p.d = pick;
     }
     g.busy = false;
-    this.msg(g.table.length < 6 ? 'отбился. подкидывай или бито' : 'бито?');
+    this.msg(g.table.length < 6 ? 'he beat it. throw in more or hit done' : 'hit done');
     this.render();
   }
 
   pass() {
     const g = this.g;
     if (!g || g.over) return;
-    if (g.att === 'me' && g.taking) { g.ai.push(...g.table.flatMap(p => p.d ? [p.a, p.d] : [p.a])); g.table = []; g.taking = false; this.msg(`${g.f.name} забрал. снова твой ход`); this.refill('me'); this.render(); this.check(); return; }
+    if (g.att === 'me' && g.taking) { g.ai.push(...g.table.flatMap(p => p.d ? [p.a, p.d] : [p.a])); g.table = []; g.taking = false; this.msg(`${g.f.name} took them. your turn again`); this.refill('me'); this.render(); this.check(); return; }
     if (g.att !== 'me' || !g.table.every(p => p.d)) return;
     g.bito += g.table.length * 2; g.table = [];
     this.refill('me');
@@ -243,7 +245,7 @@ export class Durak {
     const g = this.g;
     if (!g || g.att === 'me' || g.over) return;
     g.taking = true;
-    this.msg('беру... (он ещё подкинет)');
+    this.msg('taking... (he can still throw more in)');
     this.aiAdd(true).then(() => {
       g.me.push(...g.table.flatMap(p => p.d ? [p.a, p.d] : [p.a]));
       g.table = []; g.taking = false;
@@ -270,7 +272,7 @@ export class Durak {
     g.table.push({ a: pick });
     g.meStart = g.me.length;
     g.busy = false;
-    this.msg('отбивайся или бери');
+    this.msg('beat it with a higher card of the same suit / a trump, or take');
     this.render();
     this.check();
   }
@@ -295,12 +297,12 @@ export class Durak {
       g.bito += g.table.length * 2; g.table = [];
       this.refill('ai');
       g.att = 'me';
-      this.msg('бито. твой ход');
+      this.msg('done, cards discarded. your turn');
       this.render();
       this.check();
       return;
     }
-    this.msg('подкинул. отбивайся');
+    this.msg('he threw in more. beat it or take');
     this.render();
     this.check();
   }
@@ -319,7 +321,7 @@ export class Durak {
     const won = meOut && !aiOut, draw = meOut && aiOut;
     const big = this.$('.dk-big');
     big.hidden = false;
-    big.textContent = draw ? 'ничья' : won ? `${g.f.name} дурак` : 'ты дурак';
+    big.textContent = draw ? 'draw' : won ? `${g.f.name} is the durak` : 'you\'re the durak';
     const st = this.stats(), r = st[g.f.id] ||= { w: 0, l: 0 };
     if (!draw) { won ? r.w++ : r.l++; try { localStorage.setItem('dc.durak', JSON.stringify(st)); } catch {} }
     won ? this.w.opts.sfx?.ok?.() : this.w.opts.sfx?.fail?.();

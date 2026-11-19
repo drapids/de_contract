@@ -8,11 +8,11 @@ export class Wheel {
     const el = this.el = document.createElement('div');
     el.className = 'wheel';
     el.hidden = true;
-    el.innerHTML = `<div class="wh-win win"><div class="dlg-t"><span>колесо · scrap</span><button class="x" data-x>x</button></div>
+    el.innerHTML = `<div class="wh-win win"><div class="dlg-t"><span>scrap wheel</span><button class="x" data-x>x</button></div>
       <div class="wh-body"><canvas width="300" height="300"></canvas><div class="wh-side">
       <div class="wh-chips">${[5, 10, 25, 50].map((c, i) => `<button class="btn${i === 1 ? ' on' : ''}" data-c="${c}">${c}</button>`).join('')}</div>
       <div class="wh-nums">${NUMS.map(n => `<button class="wh-n" data-n="${n}" style="--c:${COL[n]}"><b>${n}x</b><span>0</span></button>`).join('')}</div>
-      <div class="row"><button class="btn go" data-spin>крутить</button><button class="btn" data-clear>сброс</button></div>
+      <div class="row"><button class="btn go" data-spin>spin</button><button class="btn" data-clear>clear bets</button></div>
       <div class="wh-msg dim"></div></div></div></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
@@ -31,7 +31,7 @@ export class Wheel {
   open() {
     this.on = true; this.w.busy = true; this.el.hidden = false;
     this.ui(); this.draw();
-    this.msg('ставь скрап на число. выпало — получаешь x ставку + ставку назад');
+    this.msg('pick a chip size, click a number to bet scrap on it, then spin. if it lands on your number you win that many times your bet + your bet back');
   }
 
   close() {
@@ -46,7 +46,7 @@ export class Wheel {
 
   bet(n) {
     if (this.spinning) return;
-    if (!this.w.bank.spend(0, this.chip)) { this.msg('скрапа нет. продай что-нибудь хазмату или жди аирдроп'); return; }
+    if (!this.w.bank.spend(0, this.chip)) { this.msg('no scrap. sell a skin to hazmat or wait for the airdrop'); return; }
     this.bets[n] = (this.bets[n] || 0) + this.chip;
     this.w.opts.sfx?.key?.();
     this.ui();
@@ -74,7 +74,7 @@ export class Wheel {
   spin() {
     if (this.spinning) return;
     const total = Object.values(this.bets).reduce((a, b) => a + b, 0);
-    if (!total) { this.msg('сначала поставь'); return; }
+    if (!total) { this.msg('place a bet first'); return; }
     this.spinning = true;
     const n = ORDER.length, win = Math.random() * n | 0;
     const target = -(win + 0.5) / n * Math.PI * 2 + (Math.random() - 0.5) * (Math.PI * 2 / n) * 0.7;
@@ -99,7 +99,7 @@ export class Wheel {
     const lost = Object.values(this.bets).reduce((a, x) => a + x, 0) - b;
     this.bets = {};
     this.ui();
-    if (pay) { this.w.bank.add(0, pay); this.msg(`выпало ${num}x. +${pay} scrap`); this.w.opts.sfx?.[num >= 10 ? 'dubs' : 'ok']?.(); this.w.say(num >= 10 ? ['ЕЕЕЕ', 'джекпот блять'] : ['норм', 'забрал']); }
-    else { this.msg(`выпало ${num}x. минус ${lost}`); this.w.say(['сука', 'казино всегда побеждает', 'ещё разок']); }
+    if (pay) { this.w.bank.add(0, pay); this.msg(`landed on ${num}x. +${pay} scrap`); this.w.opts.sfx?.[num >= 10 ? 'dubs' : 'ok']?.(); this.w.say(num >= 10 ? ['ЕЕЕЕ', 'джекпот блять'] : ['норм', 'забрал']); }
+    else { this.msg(`landed on ${num}x. lost ${lost} scrap`); this.w.say(['сука', 'казино всегда побеждает', 'ещё разок']); }
   }
 }

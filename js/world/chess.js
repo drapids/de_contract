@@ -55,17 +55,17 @@ export class Chess {
     const el = this.el = document.createElement('div');
     el.className = 'chess';
     el.hidden = true;
-    el.innerHTML = `<div class="ch-pick win"><div class="dlg-t"><span>шахматы</span><button class="x" data-x>x</button></div><div class="ch-list"></div>
-      <div class="ch-custom"><label>свой elo <input type="range" min="200" max="3000" step="50" value="1200"> <b>1200</b></label><button class="btn" data-custom>играть</button></div></div>
+    el.innerHTML = `<div class="ch-pick win"><div class="dlg-t"><span>chess</span><button class="x" data-x>x</button></div><div class="ch-list"></div>
+      <div class="ch-custom"><label>custom elo <input type="range" min="200" max="3000" step="50" value="1200"> <b>1200</b></label><button class="btn" data-custom>play</button></div></div>
       <div class="ch-hud" hidden><div class="ch-who"><b class="ch-name"></b><span class="ch-elo"></span></div><div class="ch-moves"></div><div class="ch-st"></div>
-      <div class="ch-btns"><button class="btn" data-a="flip">другой цвет</button><button class="btn" data-a="resign">сдаться</button><button class="btn" data-a="quit">выйти</button></div></div>
+      <div class="ch-btns"><button class="btn" data-a="flip">switch color</button><button class="btn" data-a="resign">resign</button><button class="btn" data-a="quit">leave</button></div></div>
       <div class="ch-big" hidden></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('[data-x]').onclick = () => this.close();
     const rng = this.$('.ch-custom input');
     rng.oninput = () => this.$('.ch-custom b').textContent = rng.value;
-    this.$('[data-custom]').onclick = () => this.start({ id: 'custom', name: 'кто-то с района', elo: +rng.value, skin: null, lines: ['хм', 'ну давай', 'ага'] });
+    this.$('[data-custom]').onclick = () => this.start({ id: 'custom', name: 'guy from the block', elo: +rng.value, skin: null, lines: ['хм', 'ну давай', 'ага'] });
     this.$('[data-a=resign]').onclick = () => this.g && !this.g.over && this.finish('resign');
     this.$('[data-a=quit]').onclick = () => this.open();
     this.$('[data-a=flip]').onclick = () => { if (this.g) { this.white = !this.white; this.start(this.g.f); } };
@@ -113,7 +113,7 @@ export class Chess {
     this.$('.ch-hud').hidden = true;
     this.$('.ch-big').hidden = true;
     const st = this.stats();
-    this.$('.ch-list').innerHTML = RIVALS.map((f, i) => `<button class="arm-foe" data-i="${i}"><b>${f.name}</b><span class="elo">${f.elo}</span><em>${st[f.id] ? st[f.id].w + '-' + st[f.id].l + (st[f.id].d ? '-' + st[f.id].d : '') : 'не играли'}</em></button>`).join('');
+    this.$('.ch-list').innerHTML = RIVALS.map((f, i) => `<button class="arm-foe" data-i="${i}"><b>${f.name}</b><span class="elo">${f.elo}</span><em>${st[f.id] ? st[f.id].w + '-' + st[f.id].l + (st[f.id].d ? '-' + st[f.id].d : '') : 'never played'}</em></button>`).join('');
     this.$('.ch-list').querySelectorAll('button').forEach(b => b.onclick = () => this.start(RIVALS[+b.dataset.i]));
     if (!this.fish) this.fish = new R.Fish();
   }
@@ -152,7 +152,7 @@ export class Chess {
     mv.textContent = pairs.join('\n');
     mv.scrollTop = 1e6;
     const st = R.status(g.s);
-    this.$('.ch-st').textContent = g.over ? '' : g.thinking ? `${g.f.name} думает...` : st ? '' : (g.s.turn === g.me ? 'твой ход' : '') + (R.inCheck(g.s) ? ' · шах!' : '');
+    this.$('.ch-st').textContent = g.over ? '' : g.thinking ? `${g.f.name} is thinking...` : st ? '' : (g.s.turn === g.me ? 'your move' : '') + (R.inCheck(g.s) ? ' · check!' : '');
   }
 
   sqPos(i) {
@@ -232,7 +232,7 @@ export class Chess {
     else res = 'd';
     const big = this.$('.ch-big');
     big.hidden = false;
-    big.textContent = res === 'w' ? 'МАТ. ты красавчик' : res === 'l' ? (st === 'resign' ? 'сдался' : 'тебе мат') : st === 'stalemate' ? 'пат' : 'ничья';
+    big.textContent = res === 'w' ? 'CHECKMATE. you won' : res === 'l' ? (st === 'resign' ? 'you resigned' : 'you got mated') : st === 'stalemate' ? 'stalemate' : 'draw';
     const s = this.stats(), r = s[g.f.id] ||= { w: 0, l: 0, d: 0 };
     r[res]++;
     try { localStorage.setItem('dc.chess', JSON.stringify(s)); } catch {}
