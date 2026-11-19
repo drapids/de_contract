@@ -192,6 +192,7 @@ export class Guy {
     this.gl = this.canvas.getContext('webgl', { alpha: true, antialias: false, premultipliedAlpha: false });
     this.state = 'idle';
     this.fps = opts.fps ?? 15;
+    this.pos = [0, 0, 0];
     this.damp = opts.damp ?? 0.65;
     this.prev = null;
     this.blend = 1;
@@ -538,12 +539,12 @@ export class Guy {
 
   peek() {
     const S = this.spook;
-    if (S.on || this.locked) return;
+    if (S.on || this.locked || this.haunting) return;
     Object.assign(S, { on: true, x: 1.7, z: -0.3, turn: -90, vx: -0.4, fade: 0, gun: false, plant: false });
     this.spookDo('Zombie_Idle_Loop');
     this.peekT = this.now;
     clearTimeout(this.peekTimer);
-    this.peekTimer = setTimeout(() => { S.vx = 0.5; setTimeout(() => { if (!this.locked) S.on = false; }, 1600); }, 3200);
+    this.peekTimer = setTimeout(() => { if (this.haunting) return; S.vx = 0.5; setTimeout(() => { if (!this.locked && !this.haunting) S.on = false; }, 1600); }, 3200);
   }
 
   haunt(on) {
