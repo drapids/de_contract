@@ -527,7 +527,7 @@ function toSite() {
 async function toWorld() {
   if (!world) {
     const { World } = await import('./world/world.js');
-    world = new World($('#world'), { loader, skin: S.settings.skin || 'sas', status: worldStatus, volume: () => S.settings.vol, onTerminal: () => { sfx.beep?.(true); toSite(); }, onEvent: e => { if (e === 'terminal') sfx.key?.(); } });
+    world = new World($('#world'), { loader, sfx, skin: S.settings.skin || 'sas', status: worldStatus, volume: () => S.settings.vol, onTerminal: () => { sfx.beep?.(true); toSite(); }, onEvent: e => { if (e === 'terminal') sfx.key?.(); } });
     window.dc.world = world;
     await world.ready;
   }

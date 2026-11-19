@@ -273,3 +273,24 @@ body.defusing .bar, body.defusing .layout, body.defusing .foot { filter: blur(3p
 .w-fade { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .4s; }
 .w-fade.on { opacity: 1; }
 body.inworld { overflow: hidden; }
+
+.arm { position: absolute; inset: 0; pointer-events: none; }
+.arm-pick { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 340px; pointer-events: auto; background: var(--panel); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); box-shadow: 4px 4px 0 rgba(0,0,0,.5); }
+.arm-list { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
+.arm-foe { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; text-align: left; background: var(--panel2); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); padding: 5px 8px; cursor: pointer; }
+.arm-foe:hover { background: #48513f; color: #fff; }
+.arm-foe span { font-size: 10px; letter-spacing: -2px; }
+.arm-foe em { grid-column: 1 / -1; font-style: normal; color: var(--dim); font-size: 11px; }
+.arm-hud { position: absolute; inset: 0; }
+.arm-names { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center; font: bold 15px Verdana, sans-serif; text-shadow: 2px 2px 0 #000; }
+.arm-names .a-vs { color: var(--gold); font-size: 12px; }
+.arm-bar { position: absolute; top: 42px; left: 50%; width: min(520px, 80vw); height: 16px; transform: translateX(-50%); background: #7a2a1e; border: 2px solid #111; }
+.arm-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #6fb04a; }
+.arm-bar b { position: absolute; left: 50%; top: -5px; bottom: -5px; width: 2px; background: #eee; }
+.arm-dials { position: absolute; bottom: 26px; left: 0; right: 0; display: flex; justify-content: center; gap: 60px; }
+.arm-dials canvas { pointer-events: auto; cursor: pointer; width: 180px; height: 180px; touch-action: manipulation; }
+.arm-dials canvas[hidden] { display: none; }
+.arm-tip { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); color: var(--dim); white-space: nowrap; text-shadow: 1px 1px 0 #000; }
+.arm-big { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); font: bold 54px Impact, Verdana, sans-serif; color: #f2e9c0; text-shadow: 4px 4px 0 #000; letter-spacing: 2px; }
+.arm [hidden], .arm[hidden] { display: none !important; }
+body .world-ui:has(.arm-hud:not([hidden])) .w-hint { display: none; }

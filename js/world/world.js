@@ -1,6 +1,7 @@
 import { Engine, place, boxG, M4, Q, merge } from './engine.js';
 import { Avatar } from './avatar.js';
 import { T, paint } from './tex.js';
+import { Arm } from './arm.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -29,6 +30,7 @@ export class World {
     this.ui.innerHTML = `<div class="w-where"></div><div class="w-prompt" hidden></div><div class="w-say" hidden></div><div class="w-hint">wasd ходить · shift бежать · тащи мышкой чтобы крутить · e юзать</div><div class="w-fade"></div>`;
     host.append(this.canvas, this.ui);
     this.$ = s => this.ui.querySelector(s);
+    this.match = null;
     this.e = new Engine(this.canvas, { pixel: opts.pixel || 3, loader: opts.loader, base: 'assets/world/' });
     this.av = new Avatar(this.e);
     this.keys = new Set();
@@ -39,6 +41,7 @@ export class World {
     this.idle = 0;
     this.flick = { k: 1, until: 0, next: 3 };
     this.bind();
+    this.arm = new Arm(this);
     this.ready = this.load();
   }
 
@@ -155,10 +158,11 @@ export class World {
     this.shape(sc, boxG(0.46, 0.012, 0.46, -1.8, 0.736, 1.6), this.e.texCanvas(cb2));
     sc.acts.push({ p: [-1.8, 0.8, 1.6], r: 1.2, label: 'шахматы', act: () => this.game('chess') });
 
-    this.shape(sc, merge(boxG(0.6, 0.85, 0.6, -0.2, 0.425, 2.55)), t.rust);
-    this.solid(sc, -0.5, 2.25, 0.1, 3, 0.9);
-    this.shape(sc, boxG(0.5, 0.012, 0.5, -0.2, 0.856, 2.55), t.wood);
-    sc.acts.push({ p: [-0.2, 0.9, 2.4], r: 1.1, label: 'армрестлинг', act: () => this.game('arm') });
+    const B = this.barrel = [-0.4, 0, 1.75];
+    this.shape(sc, merge(boxG(0.56, 0.93, 0.56, B[0], 0.465, B[2]), boxG(0.62, 0.05, 0.62, B[0], 0.2, B[2]), boxG(0.62, 0.05, 0.62, B[0], 0.75, B[2])), t.rust);
+    this.solid(sc, B[0] - 0.3, B[2] - 0.3, B[0] + 0.3, B[2] + 0.3, 0.98);
+    this.shape(sc, boxG(0.5, 0.03, 0.5, B[0], 0.945, B[2]), t.wood);
+    sc.acts.push({ p: [B[0], 1, B[2]], r: 1.2, label: 'армрестлинг', act: () => this.arm.open() });
 
     this.shape(sc, poly([[2.2, 0, 2.985], [3.2, 0, 2.985], [3.2, 2.05, 2.985], [2.2, 2.05, 2.985]], [0, 0, -1], [[0, 1], [1, 1], [1, 0], [0, 0]]), t.door);
     this.shape(sc, merge(boxG(1.12, 0.08, 0.06, 2.7, 2.09, 2.97), boxG(0.06, 2.1, 0.06, 2.17, 1.05, 2.97), boxG(0.06, 2.1, 0.06, 3.23, 1.05, 2.97)), t.wood);
@@ -340,6 +344,18 @@ export class World {
 
   step(dt, now) {
     const k = this.keys, av = this.av;
+    if (this.match) {
+      const a = this.arm, m = a.m;
+      a.update(dt);
+      av.update(dt); a.foe.update(dt);
+      a.top = 0.975;
+      const phi = (m.vs ?? 0) * 72 * Math.PI / 180 + (m.shake > 0 ? (Math.random() - 0.5) * 0.08 : 0) + Math.sin(now * 23) * 0.012;
+      const C = this.barrel;
+      if (!m.over || m.t < 0) { a.place(av, phi, 1, C, Math.PI / 2); a.place(a.foe, phi, -1, C, -Math.PI / 2); }
+      else { av.yaw = Math.PI / 2; a.foe.yaw = -Math.PI / 2; if (!this.afterPos) { this.afterPos = 1; } }
+      return;
+    }
+    this.afterPos = 0;
     let ix = 0, iz = 0;
     if (k.has('w') || k.has('arrowup') || k.has('ц')) iz += 1;
     if (k.has('s') || k.has('arrowdown') || k.has('ы')) iz -= 1;
@@ -373,6 +389,12 @@ export class World {
   }
 
   camera() {
+    const asp0 = this.e.canvas.width / this.e.canvas.height;
+    if (this.shot) return M4.mul(M4.persp(1.0, asp0, 0.05, 90), M4.look(this.shot[0], this.shot[1], [0, 1, 0]));
+    if (this.match) {
+      const C = this.barrel, sh = this.arm.m?.shake > 0 ? (Math.random() - 0.5) * 0.03 : 0;
+      return M4.mul(M4.persp(1.0, asp0, 0.05, 60), M4.look([C[0] + 0.55 + sh, 1.75, C[2] - 1.5], [C[0], 1.12, C[2]], [0, 1, 0]));
+    }
     const c = this.cam, sc = this.scene, av = this.av, d = c.dist * (this.zoom || 1);
     const tgt = [av.pos[0], av.pos[1] + (this.seated ? 1.05 : 1.45), av.pos[2]];
     const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw);
@@ -438,6 +460,7 @@ export class World {
     }
     if (this.windowQ) this.windowQ.groups[0].tint = night ? [0.12, 0.15, 0.3, 1] : [0.75, 0.82, 0.9, 1];
     this.av.draw();
+    if (this.match) this.arm.foe.draw();
     this.interact();
   }
 

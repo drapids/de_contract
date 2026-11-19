@@ -30,7 +30,7 @@ export class Avatar {
   async setSkin(skin) {
     const e = this.e;
     if (!this.rigs[skin]) {
-      const base = skin === 'orange' ? 'assets/guy' : 'assets/agents/' + skin;
+      const base = skin.includes('/') ? skin : skin === 'orange' ? 'assets/guy' : 'assets/agents/' + skin;
       const d = await e.json(base + '.json');
       const bones = d.bones.map(b => ({ name: b.name, parent: b.parent, local: new Float32Array(b.local), inv: new Float32Array(b.invBind) }));
       const byName = {}; bones.forEach((b, i) => byName[b.name] = i);
