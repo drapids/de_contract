@@ -56,6 +56,9 @@ async function scan(env) {
 }
 
 export default {
+  async scheduled(ev, env, ctx) {
+    ctx.waitUntil(scan(env));
+  },
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
