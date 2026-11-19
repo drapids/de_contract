@@ -2,6 +2,7 @@ import { Engine, place, boxG, M4, Q, merge } from './engine.js';
 import { Avatar } from './avatar.js';
 import { T, paint } from './tex.js';
 import { Arm } from './arm.js';
+import { Durak } from './durak.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -42,6 +43,7 @@ export class World {
     this.flick = { k: 1, until: 0, next: 3 };
     this.bind();
     this.arm = new Arm(this);
+    this.durak = new Durak(this);
     this.ready = this.load();
   }
 
@@ -144,6 +146,8 @@ export class World {
 
     this.shape(sc, merge(boxG(1.1, 0.06, 1.1, 1.6, 0.74, 1.0), boxG(0.12, 0.72, 0.12, 1.6, 0.36, 1.0), boxG(0.6, 0.04, 0.6, 1.6, 0.02, 1.0)), t.wood);
     this.solid(sc, 1.1, 0.5, 2.1, 1.5, 0.8);
+    this.cardTable = [1.6, 0, 1.0];
+    this.shape(sc, merge(boxG(0.36, 0.42, 0.36, 1.6, 0.21, 0.32), boxG(0.36, 0.42, 0.36, 1.6, 0.21, 1.68)), t.wood);
     const cards = paint(64, 64, (x, R) => { x.fillStyle = '#e8e2d2'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#a02020'; x.font = 'bold 26px serif'; x.fillText('♥', 18, 42); });
     const back = paint(32, 32, x => { x.fillStyle = '#7a1e1e'; x.fillRect(0, 0, 32, 32); x.strokeStyle = '#e0c080'; x.strokeRect(3, 3, 26, 26); });
     const ct = this.e.texCanvas(cards), cb = this.e.texCanvas(back);
@@ -304,6 +308,7 @@ export class World {
   }
 
   game(kind) {
+    if (kind === 'durak') return this.durak.open();
     if (this.opts.onGame?.(kind)) return;
     this.say({ durak: 'карты есть, соперников нет. скоро', chess: 'доска грязная, фигуры потерялись. скоро', arm: 'никто не хочет со мной бороться. скоро' }[kind]);
   }
@@ -356,6 +361,13 @@ export class World {
       return;
     }
     this.afterPos = 0;
+    if (this.durakOn) {
+      const T = this.cardTable;
+      av.update(dt); if (this.durak.g) this.durak.foe.update(dt);
+      av.pos = [T[0], 0, T[2] - 0.62]; av.yaw = 0;
+      this.durak.foe.pos = [T[0], 0, T[2] + 0.62]; this.durak.foe.yaw = Math.PI;
+      return;
+    }
     let ix = 0, iz = 0;
     if (k.has('w') || k.has('arrowup') || k.has('ц')) iz += 1;
     if (k.has('s') || k.has('arrowdown') || k.has('ы')) iz -= 1;
@@ -394,6 +406,10 @@ export class World {
     if (this.match) {
       const C = this.barrel, sh = this.arm.m?.shake > 0 ? (Math.random() - 0.5) * 0.03 : 0;
       return M4.mul(M4.persp(1.0, asp0, 0.05, 60), M4.look([C[0] + 0.55 + sh, 1.75, C[2] - 1.5], [C[0], 1.12, C[2]], [0, 1, 0]));
+    }
+    if (this.durakOn) {
+      const T = this.cardTable;
+      return M4.mul(M4.persp(1.1, asp0, 0.05, 60), M4.look([T[0] + 0.05, 2.1, T[2] - 0.95], [T[0], 0.8, T[2] + 0.3], [0, 1, 0]));
     }
     const c = this.cam, sc = this.scene, av = this.av, d = c.dist * (this.zoom || 1);
     const tgt = [av.pos[0], av.pos[1] + (this.seated ? 1.05 : 1.45), av.pos[2]];
@@ -461,6 +477,7 @@ export class World {
     if (this.windowQ) this.windowQ.groups[0].tint = night ? [0.12, 0.15, 0.3, 1] : [0.75, 0.82, 0.9, 1];
     this.av.draw();
     if (this.match) this.arm.foe.draw();
+    if (this.durakOn && this.durak.g) this.durak.foe.draw();
     this.interact();
   }
 
