@@ -1,4 +1,4 @@
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'x-key, content-type' };
 const UA = { 'User-Agent': 'Mozilla/5.0 de_contract' };
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
@@ -56,14 +56,28 @@ async function inventory(url) {
   return json(await r.json());
 }
 
+async function scan(env) {
+  if (!env.GH_TOKEN) return json({ error: 'no GH_TOKEN on the worker' }, 500);
+  const repo = env.GH_REPO || 'drapids/de_contract';
+  const r = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/scan.yml/dispatches`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'User-Agent': 'de_contract', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: 'main' })
+  });
+  if (r.status === 204) return json({ ok: true });
+  return json({ error: 'github said ' + r.status }, 502);
+}
+
 export default {
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
+    if (env.SITE_KEY && req.headers.get('x-key') !== env.SITE_KEY) return json({ error: 'wrong key' }, 401);
     try {
+      if (url.pathname === '/scan' && req.method === 'POST') return await scan(env);
       if (url.pathname === '/prices') return await prices(url, ctx);
       if (url.pathname === '/inv') return await inventory(url);
-      return json({ ok: true, routes: ['/prices?names=[...]', '/inv?id=steamid'] });
+      return json({ ok: true, routes: ['/prices?names=[...]', '/inv?id=steamid', 'POST /scan'] });
     } catch (e) {
       return json({ error: e.message }, 500);
     }
