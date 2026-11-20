@@ -40,14 +40,16 @@ export function caseEv(S) {
   for (const s of db.skins) {
     if (s.r < 2 || s.r > 5) continue;
     for (const k of s.k || []) {
-      if (!m.has(k)) m.set(k, { name: k, tiers: { 2: [], 3: [], 4: [], 5: [], 6: db.goldByCrate.get(k) || [] } });
+      if (Object.keys(db.cases || {}).length && !db.cases[k]) continue;
+      if (!m.has(k)) m.set(k, { name: db.cases?.[k]?.[0] || k, img: db.cases?.[k]?.[1], tiers: { 2: [], 3: [], 4: [], 5: [], 6: db.goldByCrate.get(k) || [] } });
       m.get(k).tiers[s.r].push(s);
     }
   }
-  const cost = Math.round(((parseFloat($('#ev-key')?.value) || 0) + (parseFloat($('#ev-case')?.value) || 0)) * 100);
+  const key = Math.round((parseFloat($('#ev-key')?.value) || 0) * 100), manual = $('#ev-case')?.value;
   const rows = [];
   for (const c of m.values()) {
     if (!c.tiers[2].length || !c.tiers[5].length) continue;
+    const cp = prices[c.name], casePrice = manual !== '' && manual != null ? Math.round(parseFloat(manual) * 100) || 0 : cp ? cp[0] : 0, cost = key + casePrice;
     let ev = 0, win = 0, cov = 0, best = null;
     const odds = c.tiers[6].length ? ODDS : [[2, 0.7992], [3, 0.1598], [4, 0.032], [5, 0.0064 + 0.0026]];
     for (const [t, p] of odds) {
@@ -67,10 +69,10 @@ export function caseEv(S) {
     }
     if (cov < 0.5) continue;
     ev /= cov; win /= cov;
-    rows.push({ name: c.name, ev, win, best, cov, img: c.tiers[5][0]?.img });
+    rows.push({ name: c.name, ev, win, best, cov, img: c.img || c.tiers[5][0]?.img, cost, casePrice, auto: !!cp });
   }
   rows.sort((a, b) => b.ev - a.ev);
-  return { rows, cost };
+  return { rows };
 }
 
 export function renderEv(S) {
@@ -79,8 +81,8 @@ export function renderEv(S) {
   const r = caseEv(S);
   if (!r.rows?.length) { el.innerHTML = '<p class="dim">no case data yet</p>'; return; }
   el.classList.remove('dim');
-  el.innerHTML = `<table class="t ev-t"><tr><th></th><th>case</th><th class="n">avg you get</th><th class="n">vs key+case</th><th class="n">chance to profit</th><th>best pull</th></tr>` +
-    r.rows.map(x => `<tr><td>${x.img ? `<img src="${esc(x.img)}" alt="">` : ''}</td><td>${esc(x.name)}${x.cov < 0.95 ? ' <small class="dim">(some prices missing)</small>' : ''}</td><td class="n">${usd(Math.round(x.ev))}</td><td class="n ${x.ev >= r.cost ? 'pos' : 'neg'}">${x.ev >= r.cost ? '+' : ''}${usd(Math.round(x.ev - r.cost))}</td><td class="n">${(x.win * 100).toFixed(1)}%</td><td>${x.best ? `<span style="color:${TIER_COLORS[x.best.s.r]}">${esc(x.best.s.n)}</span> <small class="dim">${usd(x.best.v)}</small>` : ''}</td></tr>`).join('') + '</table>';
+  el.innerHTML = `<table class="t ev-t"><tr><th></th><th>case</th><th class="n">avg you get</th><th class="n">case</th><th class="n">vs key+case</th><th class="n">chance to profit</th><th>best pull</th></tr>` +
+    r.rows.map(x => `<tr><td>${x.img ? `<img src="${esc(x.img)}" alt="">` : ''}</td><td>${esc(x.name)}${x.cov < 0.95 ? ' <small class="dim">(some prices missing)</small>' : ''}</td><td class="n">${usd(Math.round(x.ev))}</td><td class="n">${x.casePrice ? usd(x.casePrice) : '?'}</td><td class="n ${x.ev >= x.cost ? 'pos' : 'neg'}">${x.ev >= x.cost ? '+' : ''}${usd(Math.round(x.ev - x.cost))}</td><td class="n">${(x.win * 100).toFixed(1)}%</td><td>${x.best ? `<span style="color:${TIER_COLORS[x.best.s.r]}">${esc(x.best.s.n)}</span> <small class="dim">${usd(x.best.v)}</small>` : ''}</td></tr>`).join('') + '</table>';
 }
 
 export function renderAlerts(S, store) {

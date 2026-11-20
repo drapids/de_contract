@@ -31,26 +31,30 @@ export class Loot {
 
   value(item) {
     const p = this.data().prices?.[item.hash];
-    const c = p ? (p[3] || Math.round(p[0] * 0.87)) : item.c || 0;
+    let c = p ? (p[3] || Math.round(p[0] * 0.87)) : item.c || 0;
+    if (!c) c = [0, 0, 8, 45, 220, 900, 18000][item.r] || 10;
     return Math.max(1, Math.round(c * RUB));
   }
+
+  priced(item) { const p = this.data().prices?.[item.hash]; return !!(p && (p[3] || p[0])); }
 
   crates() {
     const { db } = this.data();
     if (!db) return [];
     if (this.cr && this.crDb === db) return this.cr;
-    const m = new Map();
+    const m = new Map(), known = Object.keys(db.cases || {}).length;
     for (const s of db.skins) {
       if (s.r < 2 || s.r > 5) continue;
       for (const k of s.k || []) {
-        if (!m.has(k)) m.set(k, { name: k, tiers: { 2: [], 3: [], 4: [], 5: [] }, gold: db.goldByCrate.get(k) || [] });
+        if (known && !db.cases[k]) continue;
+        if (!m.has(k)) m.set(k, { id: k, name: db.cases?.[k]?.[0] || k, img: db.cases?.[k]?.[1] || '', tiers: { 2: [], 3: [], 4: [], 5: [] }, gold: db.goldByCrate.get(k) || [] });
         m.get(k).tiers[s.r].push(s);
       }
     }
     const list = [...m.values()].filter(c => c.tiers[2].length && c.tiers[3].length && c.tiers[4].length && c.tiers[5].length);
-    list.sort((a, b) => (b.gold.length > 0) - (a.gold.length > 0) || b.name.localeCompare(a.name));
+    list.sort((a, b) => (b.gold.length > 0) - (a.gold.length > 0) || b.id.localeCompare(a.id, undefined, { numeric: true }));
     this.crDb = db;
-    return (this.cr = list.slice(0, 12));
+    return (this.cr = list);
   }
 
   roll(c) {
@@ -92,7 +96,7 @@ export class Loot {
     const b = this.$('.lt-body');
     if (!cr.length) { b.innerHTML = '<p class="dim">no cases yet. the scanner hasnt loaded skins, check back later</p>'; return; }
     b.innerHTML = `<p class="dim">cases are ${CASE_PRICE} ₽. same odds as cs: 79.9% blue, 16% purple, 3.2% pink, 0.64% red, 0.26% knife/gloves.</p><div class="lt-cases">` +
-      cr.map((c, i) => { const top = c.tiers[5][0]; return `<button class="lt-case" data-i="${i}">${top?.img ? `<img src="${esc(top.img)}" alt="" loading="lazy">` : '<div class="lt-noimg">?</div>'}<b>${esc(c.name)}</b><span>${CASE_PRICE} ₽${c.gold.length ? ' · ★' : ''}</span></button>`; }).join('') +
+      cr.map((c, i) => { const img = c.img || c.tiers[5][0]?.img; return `<button class="lt-case" data-i="${i}" title="${esc(c.tiers[5].map(s => s.n).join(', '))}">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : '<div class="lt-noimg">?</div>'}<b>${esc(c.name)}</b><span>${CASE_PRICE} ₽${c.gold.length ? ' · ★' : ''}</span></button>`; }).join('') +
       `</div><div class="lt-snack"><button class="btn" data-snack>doshirak noodles · 40 ₽</button><button class="btn" data-kvass>kvass · 25 ₽</button></div>`;
     b.querySelectorAll('.lt-case').forEach(el => el.onclick = () => this.buy(cr[+el.dataset.i]));
     b.querySelector('[data-snack]').onclick = () => { if (this.bank.spend(40)) { this.close(); this.w.say(['ммм доширак', 'ужин чемпиона', 'острый блять']); this.w.av.play('Interact', true); this.w.av.onDone = () => this.w.av.play('Idle_Loop'); } else this.w.say('not enough rubles'); };
