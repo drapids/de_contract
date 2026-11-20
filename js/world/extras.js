@@ -39,9 +39,9 @@ export class Extras {
       this.keys = (this.keys + e.key.toLowerCase()).slice(-6);
       if (this.keys.endsWith('4b2a')) { if (w.blyat?.on) w.blyat.close(); this.rush(); }
     }, true);
-    w.canvas.addEventListener('pointerdown', e => this.clickHead(e));
-    this.ikT = 60 + Math.random() * 120;
-    this.nakT = 90 + Math.random() * 200;
+    w.canvas.addEventListener('pointerdown', e => { this.clickHead(e); this.clickHeli(e); this.clickCan(e); });
+    this.ikT = 90 + Math.random() * 120;
+    this.nakT = 60 + Math.random() * 120;
   }
 
   async build() {
@@ -51,6 +51,12 @@ export class Extras {
       this.gun = e.shape({ P: g.pos, N: g.nor, U: g.uv, I: g.idx }, await e.texUrl('assets/revolver.png', false, true));
     } catch (err) { this.gun = null; }
     this.rock = e.shape(boxG(0.09, 0.07, 0.08), null, [0.45, 0.43, 0.4, 1]);
+    this.can = e.shape(merge(boxG(0.07, 0.12, 0.07, 0, 0.06, 0), boxG(0.075, 0.02, 0.075, 0, 0.06, 0)), null, [0.75, 0.15, 0.12, 1]);
+    const ys = this.w.scenes.yard;
+    this.w.shape(ys, merge(boxG(1.6, 1.25, 1.0, -10.6, 0.625, -6.6), boxG(1.7, 0.08, 1.1, -10.6, 1.29, -6.75)), this.w.t.pipe);
+    this.w.solid(ys, -11.5, -7.2, -9.7, -6.0, 1.4);
+    ys.acts.push({ p: [-10.3, 1.0, -5.9], r: 1.4, label: 'dig through the trash', act: () => this.dig() });
+    ys.acts.push({ p: [-7.6, 1.0, -2.9], r: 1.5, label: 'shoot cans', cond: () => !this.cans, act: () => this.startCans() });
     this.flashObj = e.shape(boxG(0.12, 0.12, 0.12), null, [1, 0.85, 0.4, 1]);
     const sc = this.w.scenes.basement;
     this.boardC = paint(256, 160, () => {});
@@ -129,10 +135,19 @@ export class Extras {
       }
     }
     this.rocks = this.rocks.filter(r => !r.done);
+    if (this.cans && !this.canDone) {
+      this.canT -= dt;
+      this.tip.textContent = 'click the cans · ' + Math.max(0, Math.ceil(this.canT)) + 's';
+      if (this.canT <= 0) this.endCans();
+    }
+    if (this.cans) for (const c of this.cans) if (c.v) { c.v[1] -= 9 * dt; for (let k = 0; k < 3; k++) c.p[k] += c.v[k] * dt; if (c.p[1] < 0.05) { c.p[1] = 0.05; c.v = null; } }
+    const h = w.events.heli;
+    if (h && !h.dead && w.scene === w.scenes.yard && Math.abs(h.p[0]) < 16 && !this.nk) { this.tip.hidden = false; this.tip.textContent = 'click the heli to shoot it'; this.heliTip = true; }
+    else if (this.heliTip) { this.heliTip = false; if (!this.nk && !this.cans) this.tip.hidden = true; }
     if (w.scene === w.scenes.yard && !w.busy && !this.event) {
       this.ikT -= dt; this.nakT -= dt;
       if (this.ikT <= 0) { this.ikT = 240 + Math.random() * 600; if (Math.random() < 0.4) this.ikonik(); }
-      else if (this.nakT <= 0) { this.nakT = 300 + Math.random() * 500; if (Math.random() < 0.5) this.nakeds(); }
+      else if (this.nakT <= 0) { this.nakT = 140 + Math.random() * 160; if (Math.random() < 0.75) this.nakeds(); }
     }
   }
 
@@ -140,6 +155,10 @@ export class Extras {
     const w = this.w, e = this.e;
     for (const c of this.crowd) if (c.scene === w.scene) c.av.draw(c.tint ? { tint: c.tint } : {});
     for (const r of this.rocks) e.draw(this.rock, M4.mul(at(...r.p), M4.rotY(r.t * 9)));
+    if (w.scene === w.scenes.yard) {
+      const cans = this.cans || (this.cansReady() ? [0, 1, 2, 3, 4, 5].map(i => ({ p: [-9, 1.68, -4.6 + i * 0.7] })) : []);
+      for (const c of cans) e.draw(this.can, at(...c.p));
+    }
     if (this.gun && (w.av.cur.startsWith('Pistol') || now < this.gunUntil) && w.av.W) this.drawGun(w.av, now);
   }
 
@@ -275,6 +294,83 @@ export class Extras {
     }
     this.nk = null;
     this.event = null;
+  }
+
+  async clickHeli(ev) {
+    const w = this.w, h = w.events.heli;
+    if (!h || h.dead || w.scene !== w.scenes.yard || w.busy || this.shooting) return;
+    const p = this.e.project(h.p);
+    if (!p || Math.hypot(p[0] - ev.clientX, p[1] - ev.clientY) > 110) return;
+    this.shooting = true;
+    const av = w.av;
+    av.yaw = Math.atan2(h.p[0] - av.pos[0], h.p[2] - av.pos[2]);
+    av.play('Pistol_Shoot', true); av.onDone = () => av.play('Idle_Loop');
+    this.gunUntil = performance.now() / 1000 + 1.2;
+    this.muzzle = performance.now() / 1000 + 0.08;
+    w.opts.sfx?.shot?.();
+    h.hp--; h.hitAt = performance.now();
+    if (h.hp <= 0) { h.dead = true; h.vy = 0; w.say('ПАДАЕТ', 1200); }
+    else if (h.hp === 3) w.say(['ещё чуть-чуть', 'дымится!'], 1200);
+    setTimeout(() => this.shooting = false, 280);
+  }
+
+  cansReady() { try { return Date.now() - (+localStorage.getItem('dc.cans') || 0) > 180000; } catch { return true; } }
+
+  startCans() {
+    const w = this.w;
+    if (!this.cansReady()) { w.say('кончились банки. через пару минут', 2000); return; }
+    w.busy = true;
+    this.cans = [0, 1, 2, 3, 4, 5].map(i => ({ p: [-9, 1.68, -4.6 + i * 0.7], hit: false, v: null }));
+    this.canT = 20;
+    this.tip.hidden = false;
+    this.tip.textContent = 'click the cans. 20 seconds';
+    w.av.pos = [-6.2, 0, -2.9]; w.av.yaw = -Math.PI / 2;
+    w.av.play('Pistol_Aim_Neutral');
+    w.shot = [[-5.7, 1.8, -1.6], [-9, 1.6, -2.9]];
+  }
+
+  clickCan(ev) {
+    if (!this.cans || this.canDone) return;
+    const w = this.w;
+    w.opts.sfx?.shot?.();
+    this.muzzle = performance.now() / 1000 + 0.08;
+    w.av.play('Pistol_Shoot', true); w.av.onDone = () => w.av.play('Pistol_Aim_Neutral');
+    let best = null, bd = 60;
+    for (const c of this.cans) { if (c.hit) continue; const p = this.e.project(c.p); if (!p) continue; const d = Math.hypot(p[0] - ev.clientX, p[1] - ev.clientY); if (d < bd) { bd = d; best = c; } }
+    if (best) { best.hit = true; best.v = [(Math.random() - 0.5) * 2, 3 + Math.random() * 2, (Math.random() - 0.5) * 3]; }
+    if (this.cans.every(c => c.hit)) this.endCans();
+  }
+
+  endCans() {
+    const w = this.w;
+    if (this.canDone) return;
+    this.canDone = true;
+    const n = this.cans.filter(c => c.hit).length;
+    try { localStorage.setItem('dc.cans', String(Date.now())); } catch (e) {}
+    this.tip.hidden = true;
+    if (n) w.bank.add(0, n * 3 + (n === 6 ? 8 : 0), n * 2);
+    w.say(n === 6 ? 'все шесть. снайпер' : n ? n + ' из 6' : 'ни одной блять', 2200);
+    setTimeout(() => { this.cans = null; this.canDone = false; w.shot = null; w.busy = false; w.av.play('Idle_Loop'); }, 1600);
+  }
+
+  digReady() { try { return Date.now() - (+localStorage.getItem('dc.trash') || 0) > 480000; } catch { return true; } }
+
+  dig() {
+    const w = this.w;
+    if (!this.digReady()) { w.say('там уже пусто. потом', 1800); return; }
+    try { localStorage.setItem('dc.trash', String(Date.now())); } catch (e) {}
+    w.av.play('PickUp_Table', true); w.av.onDone = () => w.av.play('Idle_Loop');
+    const r = Math.random();
+    setTimeout(() => {
+      if (r < 0.12) { w.say('крыса укусила БЛЯТЬ', 2000); w.extras.ohneShow('...'); }
+      else if (r < 0.2) {
+        const cr = w.loot.crates();
+        if (cr.length) { const it = w.loot.roll(cr[Math.random() * cr.length | 0]); w.bank.s.inv.push(it); w.bank.save(); w.say('скин в мусорке?? ' + it.hash.replace(/ \(.*\)$/, ''), 3000); }
+        else w.bank.add(0, 10);
+      }
+      else if (r < 0.55) { const n = 3 + (Math.random() * 12 | 0); w.bank.add(0, n); w.say(['скрап!', 'норм улов', 'кто это выкинул'], 1500); }
+      else { const n = 20 + (Math.random() * 60 | 0); w.bank.add(n); w.say(['мелочь', 'рубли в мусорке', 'на доширак хватит'], 1500); }
+    }, 1200);
   }
 
   async clickHead(ev) {

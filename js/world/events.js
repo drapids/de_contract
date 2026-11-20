@@ -20,7 +20,7 @@ export class Events {
   constructor(w) {
     this.w = w;
     this.e = w.e;
-    this.heliT = 140 + Math.random() * 200;
+    this.heliT = 60 + Math.random() * 90;
     this.heli = null;
     this.pokes = 0;
     this.flake = [];
@@ -65,7 +65,7 @@ export class Events {
   update(dt, now) {
     const w = this.w;
     this.heliT -= dt;
-    if (this.heliT <= 0 && !this.heli && !w.busy) { this.heliT = 240 + Math.random() * 360; this.fly(); }
+    if (this.heliT <= 0 && !this.heli && !w.busy) { this.heliT = 100 + Math.random() * 140; this.fly(); }
     if (this.heli) this.heliStep(dt);
     if (this.ghost && this.marketOpen()) this.ghost.update(dt);
     const sleepy = this.marketOpen() && w.scene === w.scenes.basement;
@@ -88,7 +88,8 @@ export class Events {
     if (this.heli && sc === w.scenes.yard) {
       const h = this.heli, M = M4.mul(at(...h.p), M4.rotY(h.yaw));
       const tilt = M4.mul(M, M4.fromQT(Q.axis([1, 0, 0], 0.14), [0, 0, 0]));
-      e.draw(this.heliBody, tilt); e.draw(this.heliGlass, tilt, { unlit: 1 });
+      e.draw(this.heliBody, tilt, h.dead ? { tint: [0.4, 0.35, 0.3, 1] } : (performance.now() - (h.hitAt || 0) < 120 ? { tint: [2, 1.6, 1.2, 1] } : {})); e.draw(this.heliGlass, tilt, { unlit: 1 });
+      if (h.dead) for (let i = 0; i < 5; i++) { const k = ((now * 0.6 + i / 5) % 1); e.draw(this.spark, at(h.p[0] + Math.sin(i * 2.1) * k, h.p[1] + 0.5 + k * 3, h.p[2] + Math.cos(i * 1.7) * k, 1 + k * 4), { unlit: 1, tint: [0.25, 0.24, 0.22, 1] }); }
       e.draw(this.rotor, M4.mul(tilt, M4.mul(at(0, 0.85, 0.2), M4.rotY(now * 31))));
       e.draw(this.tailRotor, M4.mul(tilt, M4.mul(at(0.15, 0.7, -5.6), M4.fromQT(Q.axis([1, 0, 0], now * 40), [0, 0, 0]))));
     }
@@ -119,7 +120,7 @@ export class Events {
 
   fly() {
     const w = this.w, side = Math.random() < 0.5 ? 1 : -1, z = -3 + Math.random() * 6;
-    this.heli = { p: [-40 * side, 8, z], v: [11 * side, 0, (Math.random() - 0.5) * 1.5], yaw: side > 0 ? Math.PI / 2 : -Math.PI / 2, t: 0, scared: false };
+    this.heli = { p: [-40 * side, 8, z], v: [7 * side, 0, (Math.random() - 0.5) * 1.5], yaw: side > 0 ? Math.PI / 2 : -Math.PI / 2, t: 0, scared: false, hp: 6 };
     this.noise();
     if (w.scene === w.scenes.basement) setTimeout(() => { w.flick.until = performance.now() / 1000 + 1.2; w.say(['это что вертолёт?', 'опять летают', 'тихо...'], 2500); }, 3200);
   }
@@ -127,7 +128,15 @@ export class Events {
   heliStep(dt) {
     const h = this.heli, w = this.w;
     h.t += dt;
+    if (h.dead) {
+      h.vy = (h.vy || 0) - 9 * dt; h.p[1] += h.vy * dt; h.spin = (h.spin || 0) + dt * 5; h.yaw += dt * 5;
+      for (let k = 0; k < 3; k += 2) h.p[k] += h.v[k] * dt * 0.5;
+      if (h.p[1] < 0.6) { h.p[1] = 0.6; if (!h.boom) { h.boom = true; w.opts.sfx?.shot?.(); w.say(['ВЕРТОЛЁТ СБИТ', 'ЕБАТЬ', 'мама смотри'], 2500); w.bank.add(120, 60, 30); setTimeout(() => { if (this.heli === h) { this.heli = null; if (this.snd) { this.snd.g.gain.setTargetAtTime(0, this.snd.ac.currentTime, 0.2); const s = this.snd; setTimeout(() => { try { s.src.stop(); } catch (e) {} }, 800); this.snd = null; } } }, 6000); } }
+      return;
+    }
     for (let k = 0; k < 3; k++) h.p[k] += h.v[k] * dt;
+    if (w.scene === w.scenes.yard && Math.abs(h.p[0]) < 14 && h.lingerT == null) { h.lingerT = 9; h.v0 = h.v.slice(); h.v = [h.v[0] * 0.12, 0, 0]; }
+    if (h.lingerT != null && h.lingerT > 0) { h.lingerT -= dt; if (h.lingerT <= 0) h.v = h.v0; }
     h.p[1] = 8 + Math.sin(h.t * 0.8) * 0.6;
     const d = Math.hypot(h.p[0] - w.av.pos[0], h.p[2] - w.av.pos[2]);
     if (this.snd) {
