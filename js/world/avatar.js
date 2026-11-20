@@ -90,6 +90,7 @@ export class Avatar {
   }
 
   model() {
+    if (this.modelOverride) return this.modelOverride;
     return M4.mul(M4.fromQT([0, 0, 0, 1], this.pos), M4.rotY(this.yaw));
   }
 
