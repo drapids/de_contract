@@ -32,16 +32,27 @@ export function lathe(prof, seg = 8) {
   return { P, N, U, I };
 }
 
+function ring(n, r, y, w, h, d) {
+  const out = [];
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; out.push(boxG(w, h, d, Math.cos(a) * r, y, Math.sin(a) * r)); }
+  return out;
+}
+
 function pieceGeo(t) {
-  const base = [[0, 0], [0.026, 0], [0.026, 0.006], [0.021, 0.009]];
-  if (t === 'p') return lathe([...base, [0.012, 0.014], [0.009, 0.03], [0.014, 0.033], [0.012, 0.04], [0.006, 0.046], [0, 0.047]], 7);
-  if (t === 'r') return lathe([...base, [0.016, 0.014], [0.014, 0.042], [0.02, 0.046], [0.02, 0.056], [0.013, 0.056], [0.013, 0.052], [0, 0.052]], 6);
-  if (t === 'b') return lathe([...base, [0.013, 0.015], [0.009, 0.044], [0.014, 0.048], [0.011, 0.062], [0.005, 0.07], [0.003, 0.075], [0, 0.075]], 7);
-  if (t === 'q') return lathe([...base, [0.015, 0.016], [0.01, 0.055], [0.017, 0.06], [0.019, 0.07], [0.012, 0.072], [0.006, 0.078], [0, 0.08]], 8);
-  if (t === 'k') return merge(lathe([...base, [0.016, 0.016], [0.011, 0.06], [0.018, 0.064], [0.016, 0.074], [0, 0.076]], 8), boxG(0.005, 0.022, 0.005, 0, 0.085, 0), boxG(0.016, 0.005, 0.005, 0, 0.088, 0));
+  const base = (r) => [[0, 0], [r, 0], [r, 0.007], [r * 0.88, 0.011], [r * 0.7, 0.014]];
+  if (t === 'p') return lathe([...base(0.022), [0.011, 0.018], [0.008, 0.026], [0.013, 0.029], [0.012, 0.034], [0.009, 0.041], [0.004, 0.044], [0, 0.045]], 8);
+  if (t === 'r') return merge(lathe([...base(0.026), [0.017, 0.018], [0.014, 0.044], [0.02, 0.048], [0.02, 0.056], [0, 0.056]], 8), ...ring(4, 0.015, 0.06, 0.012, 0.01, 0.012));
+  if (t === 'b') return merge(lathe([...base(0.024), [0.012, 0.02], [0.008, 0.046], [0.014, 0.05], [0.009, 0.053], [0.013, 0.062], [0.011, 0.07], [0.006, 0.077], [0.004, 0.08], [0.005, 0.084], [0, 0.087]], 8), boxG(0.03, 0.004, 0.005, 0, 0.068, 0.009));
+  if (t === 'q') return merge(lathe([...base(0.026), [0.015, 0.02], [0.009, 0.058], [0.016, 0.062], [0.012, 0.066], [0.018, 0.078], [0.011, 0.08], [0.006, 0.084], [0, 0.088]], 9), ...ring(8, 0.016, 0.082, 0.005, 0.012, 0.005), boxG(0.009, 0.009, 0.009, 0, 0.092, 0));
+  if (t === 'k') return merge(lathe([...base(0.027), [0.016, 0.02], [0.01, 0.062], [0.017, 0.066], [0.013, 0.07], [0.017, 0.082], [0, 0.084]], 9), boxG(0.006, 0.028, 0.006, 0, 0.097, 0), boxG(0.02, 0.006, 0.006, 0, 0.101, 0));
   if (t === 'n') {
-    const h = boxG(0.016, 0.03, 0.03, 0, 0.042, 0.002), m = boxG(0.014, 0.014, 0.022, 0, 0.05, 0.02), e = boxG(0.012, 0.008, 0.006, 0, 0.06, -0.004);
-    return merge(lathe([...base, [0.015, 0.014], [0.012, 0.028], [0, 0.03]], 7), h, m, e);
+    const body = lathe([...base(0.025), [0.016, 0.018], [0.014, 0.024], [0, 0.026]], 8);
+    const neck = boxG(0.018, 0.034, 0.024, 0, 0.042, -0.004);
+    const head = boxG(0.016, 0.018, 0.034, 0, 0.062, 0.008);
+    const snout = boxG(0.013, 0.012, 0.014, 0, 0.056, 0.027);
+    const mane = boxG(0.006, 0.042, 0.01, 0, 0.05, -0.016);
+    const ears = merge(boxG(0.004, 0.012, 0.005, 0.005, 0.075, -0.002), boxG(0.004, 0.012, 0.005, -0.005, 0.075, -0.002));
+    return merge(body, neck, head, snout, mane, ears);
   }
 }
 
@@ -71,7 +82,8 @@ export class Chess {
     this.$('[data-a=flip]').onclick = () => { if (this.g) { this.white = !this.white; this.start(this.g.f); } };
     this.white = true;
     addEventListener('keydown', e => { if (this.on && e.key === 'Escape') this.close(); });
-    w.canvas.addEventListener('pointerdown', e => { if (this.on && this.g) this.click(e); });
+    w.canvas.addEventListener('pointerdown', e => { if (!this.on || !this.g) return; if (e.button === 2) this.rdown(e); else this.click(e); });
+    w.canvas.addEventListener('pointerup', e => { if (this.on && this.g && e.button === 2) this.rup(e); });
     this.built = false;
   }
 
@@ -99,6 +111,8 @@ export class Chess {
     this.board = e.shape({ P: [-H, 0, -H, H, 0, -H, H, 0, H, -H, 0, H], N: [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], U: [1, 1, 0, 1, 0, 0, 1, 0], I: [0, 1, 2, 0, 2, 3] }, this.boardTex);
     this.frame = e.shape(boxG(H * 2 + 0.01, 0.018, H * 2 + 0.01, 0, -0.013, 0), this.texB);
     this.dot = e.shape(boxG(S * 0.9, 0.002, S * 0.9), null, [1, 1, 1, 1]);
+    this.bar = e.shape(boxG(0.012, 0.003, 1), null, [1, 1, 1, 1]);
+    this.head = e.shape(boxG(0.01, 0.003, 0.03, 0, 0, 0.015), null, [1, 1, 1, 1]);
   }
 
   stats() { try { return JSON.parse(localStorage.getItem('dc.chess')) || {}; } catch { return {}; } }
@@ -131,10 +145,10 @@ export class Chess {
     this.build();
     const me = this.w.opts.skin || 'sas';
     await this.foe.load(f.skin || (me === 'phoenix' ? 'assets/agents/sas' : 'assets/agents/phoenix'));
-    this.foe.play('Sitting_Idle_Loop');
     this.w.av.play('Sitting_Idle_Loop');
     const s = R.start();
     const g = this.g = { f, s, lvl: R.levelFor(f.elo), sel: -1, targets: [], over: false, thinking: false, san: [], anim: null, last: null, me: this.white ? 'w' : 'b' };
+    if (this.w.chessTable) this.entrance(f.id); else this.foe.play('Sitting_Idle_Loop');
     this.$('.ch-pick').hidden = true;
     this.$('.ch-hud').hidden = false;
     this.$('.ch-big').hidden = true;
@@ -161,9 +175,50 @@ export class Chess {
     return [C[0] - (ff - 3.5) * S, C[1], C[2] - 3.5 * S + rr * S];
   }
 
+  square(ev) {
+    let best = -1, bd = 1e9;
+    for (let i = 0; i < 64; i++) {
+      const p = this.e.project(this.sqPos(i));
+      if (!p) continue;
+      const d = Math.hypot(p[0] - ev.clientX, p[1] - ev.clientY);
+      if (d < bd) { bd = d; best = i; }
+    }
+    const a = this.e.project(this.sqPos(0)), b = this.e.project(this.sqPos(9));
+    return best < 0 || !a || !b || bd > Math.hypot(a[0] - b[0], a[1] - b[1]) * 0.75 ? -1 : best;
+  }
+
+  rdown(ev) { const g = this.g; if (!g) return; this.rStart = this.square(ev); }
+  rup(ev) {
+    const g = this.g;
+    if (!g || this.rStart == null) return;
+    const a = this.rStart, b = this.square(ev);
+    this.rStart = null;
+    if (a < 0 || b < 0) return;
+    g.marks ||= [];
+    if (g.pre) { g.pre = null; g.sel = -1; g.targets = []; return; }
+    const i = g.marks.findIndex(m => m[0] === a && m[1] === b);
+    if (i >= 0) g.marks.splice(i, 1); else g.marks.push([a, b]);
+  }
+
   click(ev) {
     const g = this.g;
-    if (g.over || g.thinking || g.anim || g.s.turn !== g.me) return;
+    if (ev.button === 2) return;
+    if (g.over || g.anim && g.s.turn === g.me) return;
+    g.marks = [];
+    const sq = this.square(ev);
+    const myTurn = g.s.turn === g.me && !g.thinking && !g.anim;
+    if (!myTurn) {
+      if (sq < 0) { g.pre = null; g.sel = -1; g.targets = []; return; }
+      const fake = R.clone(g.s); fake.turn = g.me; fake.ep = -1;
+      const p = fake.b[sq], mine = p && R.isW(p) === (g.me === 'w');
+      if (g.sel >= 0 && !mine) {
+        const m = g.targets.find(m => m.to === sq);
+        if (m) { g.pre = { from: m.from, to: m.to }; g.sel = -1; g.targets = []; this.w.opts.sfx?.key?.(); return; }
+      }
+      if (mine) { g.pre = null; g.sel = sq; g.targets = R.moves(fake).filter(m => m.from === sq); }
+      else { g.pre = null; g.sel = -1; g.targets = []; }
+      return;
+    }
     const rc = this.w.canvas.getBoundingClientRect();
     let best = -1, bd = 1e9;
     for (let i = 0; i < 64; i++) {
@@ -198,6 +253,11 @@ export class Chess {
     const g = this.g;
     const st = R.status(g.s);
     if (st) return this.finish(st);
+    if (g.s.turn === g.me && g.pre) {
+      const pre = g.pre; g.pre = null; g.sel = -1; g.targets = [];
+      const ms = R.moves(g.s).filter(m => m.from === pre.from && m.to === pre.to);
+      if (ms.length) { this.move(ms.find(x => !x.promo || x.promo.toLowerCase() === 'q') || ms[0]); return; }
+    }
     if (g.s.turn !== g.me) this.ai();
     else if (R.inCheck(g.s)) this.w.say(['шах блять', 'ой', 'он меня шахнул']);
   }
@@ -205,6 +265,7 @@ export class Chess {
   async ai() {
     const g = this.g;
     g.thinking = true; this.ui();
+    while (g.enter && this.g === g) await new Promise(r => setTimeout(r, 200));
     const t0 = performance.now();
     await new Promise(r => setTimeout(r, 30));
     let m = null;
@@ -242,8 +303,54 @@ export class Chess {
     this.ui();
   }
 
+  entrance(id) {
+    const T = this.w.chessTable, seat = [T[0], 0, T[2] + 0.85], door = [2.7, 0, 2.6];
+    const segs = {
+      quandale: [{ clip: 'Moonwalk', from: door, to: [-0.9, 0, 2.45], dur: 3.4, back: true }, { clip: 'Walk_Loop', from: [-0.9, 0, 2.45], to: seat, dur: 1.0 }],
+      pork: [{ clip: 'Walk_Loop', from: door, to: [1.7, 0, 2.45], dur: 0.9 }, { clip: 'Run_To_Flip', from: [1.7, 0, 2.45], to: seat, dur: 68 / 30 }],
+      haggord: [{ clip: 'Walk_Loop', from: door, to: [0.9, 0, 2.5], dur: 1.6 }, { clip: 'Big_Jump', from: [0.9, 0, 2.5], to: seat, dur: 72 / 30 }],
+      speed: [{ clip: 'Fast_Run', from: door, to: [2.0, 0, 2.7], dur: 0.35 }, { clip: 'Wall_Run', from: [2.0, 0, 2.66], to: [-0.8, 0, 2.66], dur: 1.5, wall: true }, { clip: 'Fast_Run', from: [-0.8, 0, 2.6], to: seat, dur: 0.5 }],
+      yakub: [{ clip: 'Northern_Soul_Spin_Combo', from: [0.3, 0, 1.6], to: seat, dur: 4.2 }]
+    }[id] || [{ clip: 'Walk_Loop', from: door, to: seat, dur: 3.2 }];
+    this.g.enter = { segs, i: -1, t: 0, seat };
+    this.next();
+    this.w.say({ quandale: 'what is up guys', pork: 'john pork is coming', haggord: 'ХАГГОРД ИДЁТ', speed: 'SEWEEEY', yakub: '...' }[id] || 'кто тут хочет в шахматы', 2000);
+  }
+
+  next() {
+    const en = this.g.enter;
+    en.i++; en.t = 0;
+    const sg = en.segs[en.i];
+    if (!sg) {
+      this.g.enter = null;
+      this.foe.modelOverride = null;
+      this.foe.pos = en.seat.slice(); this.foe.yaw = Math.PI;
+      this.foe.play('Sitting_Enter', true);
+      this.foe.onDone = () => this.foe.play('Sitting_Idle_Loop');
+      this.ui();
+      return;
+    }
+    this.foe.play(sg.clip, false);
+    this.foe.onDone = null;
+  }
+
   update(dt) {
     const g = this.g;
+    const en = g?.enter;
+    if (en) {
+      const sg = en.segs[en.i];
+      en.t += dt;
+      const k = Math.min(1, en.t / sg.dur);
+      const pos = sg.from.map((v, i) => v + (sg.to[i] - v) * k);
+      const yaw = Math.atan2(sg.to[0] - sg.from[0], sg.to[2] - sg.from[2]) + (sg.back ? Math.PI : 0);
+      this.foe.pos = pos; this.foe.yaw = yaw;
+      this.foe.modelOverride = null;
+      if (sg.wall) {
+        const m = M4.mul(M4.fromQT([0, 0, 0, 1], pos), M4.mul(M4.rotY(yaw), M4.fromQT(Q.axis([0, 0, 1], 0.3), [0, 0, 0])));
+        this.foe.modelOverride = m;
+      }
+      if (k >= 1) this.next();
+    }
     if (!g?.anim) return;
     g.anim.t += dt / 0.32;
     if (g.anim.t >= 1) { g.anim = null; this.afterMove(); }
@@ -266,7 +373,17 @@ export class Chess {
     if (a && a.m.cap && a.t < 1) { const k = a.t; const cp = a.m.epc != null ? this.sqPos(a.m.epc) : a.to; this.piece(a.m.cap, [cp[0] + k * 0.25, C[1] + k * 0.1 - k * k * 0.2, cp[2] - k * 0.1], 99, k * 6); }
     const mark = (i, col) => e.draw(this.dot, M4.fromQT([0, 0, 0, 1], [this.sqPos(i)[0], C[1] + 0.003, this.sqPos(i)[2]]), { unlit: 1, tint: col });
     if (g.last && !a) { mark(g.last.from, [0.6, 0.55, 0.2, 1]); mark(g.last.to, [0.75, 0.7, 0.25, 1]); }
-    if (g.sel >= 0) mark(g.sel, [0.3, 0.8, 0.3, 1]);
+    if (g.pre) { mark(g.pre.from, [0.85, 0.45, 0.1, 1]); mark(g.pre.to, [0.95, 0.55, 0.15, 1]); }
+    for (const [a1, b1] of g.marks || []) {
+      const A = this.sqPos(a1), B = this.sqPos(b1);
+      if (a1 === b1) { for (let k = 0; k < 8; k++) { const an = k / 8 * Math.PI * 2; e.draw(this.dot, M4.mul(M4.fromQT([0, 0, 0, 1], [A[0] + Math.cos(an) * this.S * 0.4, C[1] + 0.005, A[2] + Math.sin(an) * this.S * 0.4]), M4.fromQT([0, 0, 0, 1], [0, 0, 0], 0.18)), { unlit: 1, tint: [0.35, 0.75, 0.3, 1] }); } continue; }
+      const dx = B[0] - A[0], dz = B[2] - A[2], L = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz);
+      const mid = [(A[0] + B[0]) / 2 - dx / L * 0.012, C[1] + 0.006, (A[2] + B[2]) / 2 - dz / L * 0.012];
+      e.draw(this.bar, M4.mul(M4.fromQT([0, 0, 0, 1], mid), M4.mul(M4.rotY(yaw), new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, L - 0.03, 0, 0, 0, 0, 1]))), { unlit: 1, tint: [0.95, 0.6, 0.15, 1] });
+      const tip = [B[0] - dx / L * 0.014, C[1] + 0.007, B[2] - dz / L * 0.014];
+      for (const s2 of [-1, 1]) e.draw(this.head, M4.mul(M4.fromQT([0, 0, 0, 1], tip), M4.rotY(yaw + Math.PI + s2 * 0.6)), { unlit: 1, tint: [0.95, 0.6, 0.15, 1] });
+    }
+    if (g.sel >= 0) mark(g.sel, g.s.turn === g.me ? [0.3, 0.8, 0.3, 1] : [0.85, 0.5, 0.15, 1]);
     for (const m of g.targets) mark(m.to, m.cap ? [0.9, 0.3, 0.2, 1] : [0.25, 0.55, 0.85, 1]);
   }
 

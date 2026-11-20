@@ -545,7 +545,7 @@ export class World {
       av.update(dt); if (this.chess.g) this.chess.foe.update(dt);
       this.chess.update(dt);
       av.pos = [T[0], 0, T[2] - 0.85]; av.yaw = 0;
-      this.chess.foe.pos = [T[0], 0, T[2] + 0.85]; this.chess.foe.yaw = Math.PI;
+      if (!this.chess.g?.enter) { this.chess.foe.pos = [T[0], 0, T[2] + 0.85]; this.chess.foe.yaw = Math.PI; }
       return;
     }
     if (this.durakOn) {
@@ -657,6 +657,7 @@ export class World {
     }
     if (this.chessOn) {
       const T = this.chessTable;
+      if (this.chess.g?.enter) { const f = this.chess.foe.pos; return M4.mul(M4.persp(1.15, asp0, 0.05, 60), M4.look([T[0] - 0.4, 2.0, T[2] - 1.3], [f[0] * 0.8 + T[0] * 0.2, 0.9, f[2]], [0, 1, 0])); }
       return M4.mul(M4.persp(1.0, asp0, 0.05, 60), M4.look([T[0], 1.3, T[2] - 0.5], [T[0], 0.72, T[2] + 0.06], [0, 1, 0]));
     }
     if (this.durakOn) {
