@@ -637,14 +637,14 @@ export class Guy {
   dragStart(e) {
     if (this.paused || this.busy() || this.cineK > 0.1 || this.state === 'hold' || !this.inHit(e) || e.target.closest('button, a, input, select, textarea, label, .tu, .dlg, .key, .modal')) return;
     const a = this.screen([this.pos[0], 1, 0]), b = this.screen([this.pos[0] + 1, 1, 0]);
-    this.drag = { x0: e.clientX, p0: this.pos[0], k: 1 / Math.max(1, b[0] - a[0]), moved: false };
+    this.drag = { x0: e.clientX, y0: e.clientY, p0: this.pos[0], y1: this.pos[1], k: 1 / Math.max(1, b[0] - a[0]), moved: false };
   }
 
   dragMove(e) {
     const d = this.drag;
     if (!d) return;
-    const dx = e.clientX - d.x0;
-    if (!d.moved && Math.abs(dx) < 8) return;
+    const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+    if (!d.moved && Math.hypot(dx, dy) < 8) return;
     if (!d.moved) { d.moved = true; this.back = 'idle'; this.set('drag'); this.say(pick(DRAG), 1600); document.body.classList.add('dragging-guy'); }
     const r = this.host.getBoundingClientRect();
     let x = d.p0 + dx * d.k;
@@ -653,7 +653,10 @@ export class Guy {
     if (sx > r.width - 60) x -= (sx - r.width + 60) * d.k;
     this.dragV = x - this.pos[0];
     this.pos[0] = x;
-    this.pos[1] = 0.14;
+    let y = Math.max(0.14, d.y1 + 0.14 - dy * d.k);
+    const top = this.screen([x, y + 1.9, 0])[1];
+    if (top < 10) y -= (10 - top) * d.k;
+    this.pos[1] = y;
   }
 
   dragEnd() {

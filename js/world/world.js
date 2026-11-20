@@ -256,7 +256,7 @@ export class World {
     this.solid(sc, -9.1, -5.1, -8.9, -0.9, 1.8);
 
     const hz = new Avatar(this.e);
-    hz.load('assets/chars/hazmat').then(() => { hz.play('Idle_FoldArms_Loop'); hz.pos = [8.6, 0, 4.2]; hz.yaw = Math.PI * 0.95; this.npcs.push({ av: hz, scene: 'yard' }); }).catch(() => {});
+    hz.load('assets/chars/hazmat').then(() => { hz.play('Idle_Loop'); hz.pos = [8.6, 0, 4.2]; hz.yaw = Math.PI * 0.95; this.npcs.push({ av: hz, scene: 'yard' }); }).catch(() => {});
     this.solid(sc, 8.3, 3.9, 8.9, 4.5, 2);
     sc.acts.push({ p: [8.6, 1.2, 4.0], r: 1.4, label: 'sell skins for scrap', act: () => { this.say(['чё продаёшь', 'скрап есть скрап']); this.loot.inventory(); } });
     this.wheel.draw();

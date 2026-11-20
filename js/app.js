@@ -584,6 +584,7 @@ async function toWorld() {
   world.enter();
 }
 $('#home').onclick = () => toWorld();
+document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea, [contenteditable]')) e.preventDefault(); });
 toWorld().catch(e => { console.error(e); toSite(); });
 setInterval(renderStatus, 30000);
 import('./specter.js').then(m => m.init?.(guy, S)).catch(() => {});
