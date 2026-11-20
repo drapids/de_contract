@@ -36,7 +36,7 @@ export class World {
     this.canvas.className = 'world-gl';
     this.ui = document.createElement('div');
     this.ui.className = 'world-ui';
-    this.ui.innerHTML = `<div class="w-where"></div><div class="w-prompt" hidden></div><div class="w-say" hidden></div><div class="w-hint">wasd walk · shift run · drag mouse to look · e use · i inventory · b phrasebook</div><div class="w-fade"></div>`;
+    this.ui.innerHTML = `<div class="w-where"></div><div class="w-prompt" hidden></div><div class="w-say" hidden></div><div class="w-hint">wasd walk · shift run · space jump (hold to bhop) · f dropkick · v first person · q shift lock · e use · i inventory · b phrasebook</div><div class="w-fade"></div>`;
     host.append(this.canvas, this.ui);
     this.$ = s => this.ui.querySelector(s);
     this.match = null;
@@ -75,12 +75,21 @@ export class World {
       this.keys.add(k);
       if (e.shiftKey) this.keys.add('shift');
       if (k === 'e' && !e.repeat) this.use();
+      if ((k === 'v' || k === 'м') && !e.repeat && !this.surfOn && !this.busy) { this.fp = !this.fp; this.slock = false; if (this.fp) this.canvas.requestPointerLock?.(); else document.exitPointerLock?.(); }
+      if ((k === 'q' || k === 'й') && !e.repeat && !this.surfOn && !this.busy) { this.slock = !this.slock; this.fp = false; if (this.slock) this.canvas.requestPointerLock?.(); else document.exitPointerLock?.(); }
+      if ((k === 'f' || k === 'а') && !e.repeat && !this.busy && !this.kickS && !this.seated) this.dropkick();
       this.$('.w-hint').classList.add('gone');
     });
     addEventListener('keyup', e => { this.keys.delete(e.key.toLowerCase()); if (!e.shiftKey) this.keys.delete('shift'); });
     addEventListener('blur', () => this.keys.clear());
     let drag = null;
-    this.canvas.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; this.canvas.setPointerCapture(e.pointerId); });
+    this.canvas.addEventListener('pointerdown', e => { if ((this.fp || this.slock) && !this.surfOn && document.pointerLockElement !== this.canvas && !this.busy) this.canvas.requestPointerLock?.(); drag = [e.clientX, e.clientY]; this.canvas.setPointerCapture(e.pointerId); });
+    addEventListener('mousemove', e => {
+      if (this.surfOn || !this.active || document.pointerLockElement !== this.canvas) return;
+      this.cam.yaw -= e.movementX * 0.0028;
+      this.cam.pitch = Math.max(this.fp ? -1.3 : -0.2, Math.min(this.fp ? 1.3 : 1.1, this.cam.pitch + e.movementY * 0.0024));
+      this.camTouched = performance.now();
+    });
     this.canvas.addEventListener('pointermove', e => {
       if (!drag) return;
       this.cam.yaw -= (e.clientX - drag[0]) * 0.006;
@@ -356,6 +365,55 @@ export class World {
     }
   }
 
+  async loadArms() {
+    if (this.armsP) return this.armsP;
+    this.armsP = (async () => { const d = await this.e.json('assets/fp/fparms.json'); this.arms = this.e.shape({ P: d.pos, N: d.nor, U: d.uv, I: d.idx }, await this.e.texUrl('assets/fp/fparms.png', false, false)); })().catch(() => {});
+    return this.armsP;
+  }
+
+  drawArms(now, dt) {
+    if (!this.arms) { this.loadArms(); return; }
+    const { eye, f } = this.fpEye, y = this.fpEye.yaw;
+    const r = [-Math.cos(y), 0, Math.sin(y)];
+    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    const hs = Math.hypot(...(this.hv || [0, 0]));
+    const run = this.av.pos[1] > 0 ? 0 : Math.min(1, hs / 3.4);
+    const bx = Math.sin(now * 8) * 0.012 * run, by = Math.abs(Math.cos(now * 8)) * 0.014 * run;
+    const ox = bx, oy = -0.13 - by - (this.vy > 0 ? 0.02 : 0), oz = -0.06;
+    const t = [eye[0] - r[0] * ox + u[0] * oy + f[0] * oz, eye[1] - r[1] * ox + u[1] * oy + f[1] * oz, eye[2] - r[2] * ox + u[2] * oy + f[2] * oz];
+    const A = new Float32Array([-r[0], -r[1], -r[2], 0, u[0], u[1], u[2], 0, f[0], f[1], f[2], 0, t[0], t[1], t[2], 1]);
+    this.e.gl.clear(this.e.gl.DEPTH_BUFFER_BIT);
+    this.e.draw(this.arms, A);
+  }
+
+  dropkick() {
+    const av = this.av;
+    this.kickS = { t: 0, d: [Math.sin(av.yaw), Math.cos(av.yaw)], hit: false };
+    av.play('Drop_Kick', true);
+    av.onDone = () => { this.kickS = null; av.play('Idle_Loop'); };
+    this.say(['ХАААА', 'ДРОПКИК', 'спарта'], 1200);
+  }
+
+  kickHit(d) {
+    const av = this.av, sc = this.scene;
+    const hits = [];
+    const test = (v, cb) => { const dx = v.pos[0] - av.pos[0], dz = v.pos[2] - av.pos[2], dist = Math.hypot(dx, dz); if (dist < 1.9 && (dx * d[0] + dz * d[1]) / (dist || 1) > 0.35) cb(dist); };
+    for (const n of this.npcs) if (this.scenes[n.scene] === sc) test(n.av, () => hits.push({ av: n.av, after: () => n.av.play('Idle_Loop'), line: ['ты чё блять', 'мой скрап!', 'ай'] }));
+    for (const c of this.extras.crowd) if (c.scene === sc && !c.dead) test(c.av, () => hits.push({ av: c.av, after: () => { if (c.think) { c.dead = true; c.t = 0; } else c.av.play('Idle_Loop'); }, crowd: c }));
+    const g = this.events.ghost;
+    if (g && this.events.marketOpen() && sc === this.scenes.basement) test(g, () => hits.push({ av: g, after: () => g.play('Idle_FoldArms_Loop'), line: ['эй я призрак', 'больно вообще-то'] }));
+    const ch = this.chicken;
+    if (sc === this.scenes.yard && !ch.fly) test({ pos: ch.pos }, () => { ch.fly = 1; ch.vy = 6; ch.vx = d[0] * 7; ch.vz = d[1] * 7; this.say('КУДАХ', 900); });
+    for (const h of hits) {
+      if (h.crowd) { h.crowd.think = null; h.crowd.vel = null; }
+      h.av.play('Knocked_Out', true);
+      h.av.onDone = h.after;
+      (this.kb ||= []).push({ av: h.av, v: [d[0] * 4.5, d[1] * 4.5], t: 0.6 });
+      if (h.line) setTimeout(() => this.say(h.line[Math.random() * h.line.length | 0], 1500), 900);
+    }
+    if (hits.length) { this.opts.sfx?.poke?.(); this.opts.sfx?.push?.(); }
+  }
+
   timeOfDay() {
     const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
     const day = h >= 8 && h < 16.5 ? 1 : h >= 7 && h < 8 ? h - 7 : h >= 16.5 && h < 18 ? (18 - h) / 1.5 : 0;
@@ -510,30 +568,83 @@ export class World {
     if (k.has('s') || k.has('arrowdown') || k.has('ы')) iz -= 1;
     if (k.has('a') || k.has('arrowleft') || k.has('ф')) ix += 1;
     if (k.has('d') || k.has('arrowright') || k.has('в')) ix -= 1;
-    const moving = (ix || iz) && !this.busy;
+    const lock = this.fp || this.slock;
+    const kick = this.kickS;
+    const moving = (ix || iz) && !this.busy && !kick;
     if (this.seated && moving) this.stand();
+    const run = k.has('shift');
+    this.hv ||= [0, 0]; this.vy ||= 0;
+    const air = av.pos[1] > 0.001 || this.vy > 0;
+    let wx = 0, wz = 0;
     if (moving && !this.seated) {
       const cy = this.cam.yaw, fx = Math.sin(cy), fz = Math.cos(cy);
-      let dx = fx * iz + fz * ix, dz = fz * iz - fx * ix;
-      const l = Math.hypot(dx, dz); dx /= l; dz /= l;
-      const run = k.has('shift'), sp = run ? 3.4 : 1.45;
-      av.pos[0] += dx * sp * dt; av.pos[2] += dz * sp * dt;
-      this.collide(av.pos, 0.28);
-      const want = Math.atan2(dx, dz);
+      wx = fx * iz + fz * ix; wz = fz * iz - fx * ix;
+      const l = Math.hypot(wx, wz); wx /= l; wz /= l;
+    }
+    const sp = run ? 3.4 : 1.45;
+    if (kick) {
+      kick.t += dt;
+      if (kick.t > 0.25 && kick.t < 0.95) { av.pos[0] += kick.d[0] * 3.4 * dt; av.pos[2] += kick.d[1] * 3.4 * dt; }
+      if (!kick.hit && kick.t > 0.5) { kick.hit = true; this.kickHit(kick.d); }
+      this.hv = [0, 0];
+    } else if (!air) {
+      const carry = now - (this.landT || 0) < 0.2 && this.hops > 0 ? Math.hypot(...this.hv) : 0;
+      const tgt = Math.max(sp, carry);
+      this.hv = [wx * tgt, wz * tgt];
+      if (k.has(' ') && !this.busy && !this.seated) {
+        this.hops = now - (this.landT || 0) < 0.2 ? Math.min((this.hops || 0) + 1, 8) : 1;
+        const boost = 1 + (this.hops - 1) * 0.09;
+        this.hv = [this.hv[0] * boost, this.hv[1] * boost];
+        this.vy = 4.7;
+        av.play('Jump', true); av.onDone = null;
+        this.idle = 0;
+      }
+    } else {
+      const hs = Math.hypot(...this.hv);
+      if (moving && hs > 0.05) {
+        const cur = Math.atan2(this.hv[0], this.hv[1]), want = Math.atan2(wx, wz);
+        let d = want - cur; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+        const nd = cur + Math.max(-2.6 * dt, Math.min(2.6 * dt, d));
+        this.hv = [Math.sin(nd) * hs, Math.cos(nd) * hs];
+      } else if (moving) this.hv = [wx * sp * 0.6, wz * sp * 0.6];
+    }
+    if (air || this.vy > 0) {
+      this.vy -= 14 * dt;
+      av.pos[1] = Math.max(0, av.pos[1] + this.vy * dt);
+      if (av.pos[1] <= 0 && this.vy < 0) {
+        this.vy = 0; this.landT = now;
+        if (!k.has(' ')) { this.hops = 0; if (!kick) { av.play(Math.hypot(...this.hv) > 0.1 ? (run ? 'Jog_Fwd_Loop' : 'Walk_Loop') : 'Jump_Land', !Math.hypot(...this.hv)); av.onDone = () => av.play('Idle_Loop'); } }
+      }
+    }
+    av.pos[0] += this.hv[0] * dt; av.pos[2] += this.hv[1] * dt;
+    this.collide(av.pos, 0.28);
+    const hs = Math.hypot(...this.hv);
+    if (lock && !kick) av.yaw = this.cam.yaw;
+    else if (hs > 0.1 && !kick) {
+      const want = Math.atan2(this.hv[0], this.hv[1]);
       let d = want - av.yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       av.yaw += d * Math.min(1, dt * 10);
-      av.play(run ? 'Jog_Fwd_Loop' : 'Walk_Loop');
-      this.idle = 0;
-      if (!this.camTouched || now - this.camTouched > 1500) {
-        let c = av.yaw - this.cam.yaw; while (c > Math.PI) c -= 2 * Math.PI; while (c < -Math.PI) c += 2 * Math.PI;
-        if (iz >= 0) this.cam.yaw += c * Math.min(1, dt * 1.2);
-      }
-    } else if (!this.busy && !this.seated) {
-      this.idle += dt;
-      const cur = av.cur;
-      if (cur === 'Walk_Loop' || cur === 'Jog_Fwd_Loop') av.play('Idle_Loop');
-      if (this.idle > 14 && cur === 'Idle_Loop') av.play(Math.random() < 0.5 ? 'Idle_TalkingPhone_Loop' : 'Idle_FoldArms_Loop');
     }
+    if (!air && !kick) {
+      if (moving) {
+        av.play(run || hs > 2.5 ? (hs > 4 ? 'Fast_Run' : 'Jog_Fwd_Loop') : 'Walk_Loop');
+        this.idle = 0;
+        if (!lock && (!this.camTouched || now - this.camTouched > 1500)) {
+          let c = av.yaw - this.cam.yaw; while (c > Math.PI) c -= 2 * Math.PI; while (c < -Math.PI) c += 2 * Math.PI;
+          if (iz >= 0) this.cam.yaw += c * Math.min(1, dt * 1.2);
+        }
+      } else if (!this.busy && !this.seated) {
+        this.idle += dt;
+        const cur = av.cur;
+        if (['Walk_Loop', 'Jog_Fwd_Loop', 'Fast_Run'].includes(cur)) av.play('Idle_Loop');
+        if (this.idle > 14 && cur === 'Idle_Loop') av.play(Math.random() < 0.5 ? 'Idle_TalkingPhone_Loop' : 'Idle_FoldArms_Loop');
+      }
+    }
+    for (const kb of this.kb || []) {
+      kb.t -= dt;
+      if (kb.t > 0) { kb.av.pos[0] += kb.v[0] * dt * (kb.t / 0.6); kb.av.pos[2] += kb.v[1] * dt * (kb.t / 0.6); this.collide(kb.av.pos, 0.25); }
+    }
+    this.kb = (this.kb || []).filter(x => x.t > 0);
     av.update(dt);
   }
 
@@ -553,6 +664,13 @@ export class World {
       return M4.mul(M4.persp(1.1, asp0, 0.05, 60), M4.look([T[0] + 0.05, 2.1, T[2] - 0.95], [T[0], 0.8, T[2] + 0.3], [0, 1, 0]));
     }
     const c = this.cam, sc = this.scene, av = this.av, d = c.dist * (this.zoom || 1);
+    if (this.fp && !this.busy) {
+      const h = av.head(), f = [Math.sin(c.yaw) * Math.cos(c.pitch), -Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)];
+      const eye = [av.pos[0] + Math.sin(av.yaw) * 0.12, h[1] + 0.06, av.pos[2] + Math.cos(av.yaw) * 0.12];
+      this.fpEye = { eye, f, yaw: c.yaw, pitch: c.pitch };
+      return M4.mul(M4.persp(1.25, asp0, 0.03, 90), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
+    }
+    this.fpEye = null;
     const tgt = [av.pos[0], av.pos[1] + (this.seated ? 1.05 : 1.45), av.pos[2]];
     const fx = Math.sin(c.yaw), fz = Math.cos(c.yaw);
     tgt[0] += -fz * 0.35; tgt[2] += fx * 0.35;
@@ -620,12 +738,13 @@ export class World {
       e.draw(it.obj, it.m, o);
     }
     if (this.windowQ) this.windowQ.groups[0].tint = night ? [0.12, 0.15, 0.3, 1] : [0.75, 0.82, 0.9, 1];
-    if (!this.chessOn) this.av.draw();
+    if (!this.chessOn && !this.fpEye) this.av.draw();
     if (sc === this.scenes.basement) this.chess.draw();
     for (const n of this.npcs) if (this.scenes[n.scene] === sc) { n.av.update(Math.min(dt, 0.05)); n.av.draw(); }
     if (sc === this.scenes.yard) this.drawYardExtras(now);
     this.events.draw(now);
     this.extras.draw(now);
+    if (this.fpEye) this.drawArms(now, dt);
     if (this.chessOn && this.chess.g) this.chess.foe.draw();
     if (this.match) this.arm.foe.draw();
     if (this.durakOn && this.durak.g) this.durak.foe.draw();
