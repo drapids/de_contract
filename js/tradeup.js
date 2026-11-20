@@ -59,6 +59,7 @@ export class Db {
   constructor(data) {
     this.skins = data.skins;
     this.collections = data.collections || {};
+    this.cases = data.cases || {};
     this.byName = new Map(this.skins.map(s => [s.n, s]));
     this.byColTier = new Map();
     this.goldByCrate = new Map();

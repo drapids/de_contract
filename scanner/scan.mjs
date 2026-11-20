@@ -212,7 +212,7 @@ for (const g of fresh.slice(0, 5)) {
   });
 }
 
-const skinsLite = { skins: meta.skins, collections: meta.collections };
+const skinsLite = { skins: meta.skins, collections: meta.collections, cases: meta.cases || {} };
 const prices = {};
 for (const h of new Set([...Object.keys(steamCache), ...Object.keys(verified)])) {
   const v = P.get(h);

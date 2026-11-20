@@ -9,7 +9,7 @@ const RARITY = {
 
 async function getJson(url, opts = {}) {
   if (process.env.FIXTURES) {
-    const key = url.includes('priceoverview') ? 'overview' : url.includes('steamcommunity') ? 'steam' : url.includes('CSGO-API') ? 'skins' : 'other';
+    const key = url.includes('priceoverview') ? 'overview' : url.includes('steamcommunity') ? 'steam' : url.includes('crates.json') ? 'crates' : url.includes('CSGO-API') ? 'skins' : 'other';
     const data = JSON.parse(await readFile(`${process.env.FIXTURES}/${key}.json`, 'utf8'));
     if (key === 'overview') {
       const name = decodeURIComponent(url.split('market_hash_name=')[1]);
@@ -42,7 +42,12 @@ export async function loadSkins() {
       ...(star && !s.name.includes(' | ') ? { vanilla: true } : {})
     });
   }
-  return { skins, collections };
+  const cases = {};
+  try {
+    const cr = await getJson('https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/crates.json');
+    for (const c of cr || []) if (c.type === 'Case') cases[c.id] = [c.name, c.image || ''];
+  } catch {}
+  return { skins, collections, cases };
 }
 
 const cents = s => s ? Math.round(parseFloat(String(s).replace(/[^0-9.]/g, '')) * 100) : 0;
@@ -62,7 +67,7 @@ export async function steamOverview(names, delay = 3200, max = 40) {
   return { data: out, rate };
 }
 
-const SEGMENTS = ['&category_730_Weapon%5B%5D=any', '&category_730_Type%5B%5D=tag_Type_Hands'];
+const SEGMENTS = ['&category_730_Weapon%5B%5D=any', '&category_730_Type%5B%5D=tag_Type_Hands', '&category_730_Type%5B%5D=tag_CSGO_Type_WeaponCase'];
 
 export async function steamPages(cursor, pages, delay = 3500) {
   const out = {};
