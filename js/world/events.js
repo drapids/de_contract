@@ -142,7 +142,7 @@ export class Events {
       w.scared = { t: 2.6, v: [dx / l * 1.2, dz / l * 1.2] };
       const c = w.chicken; if (c && !c.fly) c.tgt = [c.pos[0] - h.v[0] * 0.4, 0, c.pos[2] + 3];
       for (const n of w.npcs) n.av.play('Crouch_Idle_Loop');
-      setTimeout(() => { for (const n of w.npcs) n.av.play('Idle_FoldArms_Loop'); }, 4000);
+      setTimeout(() => { for (const n of w.npcs) n.av.play('Idle_Loop'); }, 4000);
     }
     if (Math.abs(h.p[0]) > 45) { this.heli = null; if (this.snd) { this.snd.g.gain.setTargetAtTime(0, this.snd.ac.currentTime, 0.3); const s = this.snd; setTimeout(() => { try { s.src.stop(); } catch (e) {} }, 1500); this.snd = null; } }
   }
@@ -211,7 +211,7 @@ export class Events {
 
   stock() {
     const b = this.w.bank.s, sd = this.seed();
-    if (b.market?.day === sd) return b.market;
+    if (b.market?.day === sd && b.market.v === 2) return b.market;
     const cr = this.w.loot.crates();
     if (!cr.length) return null;
     let a = sd;
@@ -221,11 +221,11 @@ export class Events {
     const items = [];
     for (let i = 0; i < 6; i++) {
       const c = cr[Math.floor(rnd() * cr.length)];
-      let it; for (let k = 0; k < 4; k++) { it = this.w.loot.roll(c); if (it.r >= 3) break; }
+      let it; for (let k = 0; k < 12; k++) { it = this.w.loot.roll(c); if (it.r >= 3 && this.w.loot.priced(it)) break; }
       items.push({ ...it, off: 30 + Math.floor(rnd() * 45) });
     }
     Math.random = keep;
-    b.market = { day: sd, items, seen: [], bought: [] };
+    b.market = { day: sd, v: 2, items, seen: [], bought: [] };
     this.w.bank.save();
     return b.market;
   }
@@ -241,7 +241,7 @@ export class Events {
     const h = this.hour(), left = h >= 21 ? 30 - h : h < 6 ? 6 - h : 0;
     this.mk.querySelector('.nm-left').textContent = left > 0 ? 'closes in ' + Math.floor(left) + 'h ' + Math.floor(left % 1 * 60) + 'm' : '';
     c.innerHTML = m.items.map((it, i) => {
-      const v = this.w.loot.value(it), price = Math.max(1, Math.round(v * (100 - it.off) / 100));
+      const v = this.w.loot.value(it), price = Math.max(5, Math.round(v * (100 - it.off) / 100));
       const open = m.seen.includes(i), got = m.bought.includes(i);
       return `<div class="nm-card ${open ? 'open' : ''} ${got ? 'got' : ''}" data-i="${i}" style="--c:${TIER_COLORS[it.r]}">${open ? `${it.img ? `<img src="${esc(it.img)}" alt="">` : ''}<b>${esc(short(it.hash))}</b><s>${v} ₽</s><em>-${it.off}%</em><button class="btn" ${got ? 'disabled' : ''}>${got ? 'bought' : price + ' ₽'}</button>` : '<span>?</span>'}</div>`;
     }).join('');
@@ -249,7 +249,7 @@ export class Events {
       const i = +el.dataset.i;
       if (!m.seen.includes(i)) { m.seen.push(i); this.w.bank.save(); this.w.opts.sfx?.beep?.(true); this.openMarket(); return; }
       if (ev.target.closest('button') && !m.bought.includes(i)) {
-        const it = m.items[i], price = Math.max(1, Math.round(this.w.loot.value(it) * (100 - it.off) / 100));
+        const it = m.items[i], price = Math.max(5, Math.round(this.w.loot.value(it) * (100 - it.off) / 100));
         if (!this.w.bank.spend(price)) { this.w.say('not enough rubles'); return; }
         m.bought.push(i);
         const { off, ...item } = it;
