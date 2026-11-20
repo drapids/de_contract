@@ -10,6 +10,7 @@ import { Wheel } from './wheel.js';
 import { Events } from './events.js';
 import { Blyat } from './blyat.js';
 import { Extras } from './extras.js';
+import { Surf } from './surf.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -58,6 +59,7 @@ export class World {
     this.events = new Events(this);
     this.blyat = new Blyat(this);
     this.extras = new Extras(this);
+    this.surf = new Surf(this);
     const emit = opts.onEvent;
     this.opts.onEvent = (ev, x) => { this.event(ev, x); emit?.(ev, x); };
     this.npcs = [];
@@ -265,6 +267,11 @@ export class World {
     this.shape(sc, poly([[7.35, 0.75, 4.32], [6.05, 0.75, 4.32], [6.05, 2.05, 4.32], [7.35, 2.05, 4.32]], [0, 0, -1], [[0, 1], [1, 1], [1, 0], [0, 0]]), wg);
     this.solid(sc, 5.95, 4.15, 7.45, 4.65, 2.1);
     sc.acts.push({ p: [6.7, 1.3, 4.1], r: 1.5, label: 'scrap wheel', act: () => this.wheel.open() });
+    this.shape(sc, boxG(1.0, 0.75, 0.6, 3.6, 0.375, 4.6), t.wood);
+    await this.put(sc, 'crt', 3.6, 0.75, 4.55, Math.PI, 0.9);
+    this.shape(sc, boxG(0.45, 0.4, 0.45, 4.25, 0.2, 4.6), t.rust);
+    this.solid(sc, 3.0, 4.25, 4.5, 4.95, 1.3);
+    sc.acts.push({ p: [3.6, 1.0, 4.1], r: 1.4, label: 'surf servers', act: () => this.surf.open() });
     this.dropAt = [-1.5, 0, 2.2];
     this.drop = this.e.shape(merge(boxG(0.9, 0.6, 0.9, 0, 0.3, 0), boxG(0.95, 0.08, 0.95, 0, 0.62, 0), boxG(0.06, 0.66, 0.95, 0.47, 0.33, 0), boxG(0.06, 0.66, 0.95, -0.47, 0.33, 0)), this.e.texCanvas(paint(32, 32, (x) => { x.fillStyle = '#3a5f8a'; x.fillRect(0, 0, 32, 32); x.fillStyle = '#e8e2c8'; x.fillRect(0, 13, 32, 6); x.fillStyle = 'rgba(0,0,0,.3)'; x.fillRect(0, 0, 32, 2); })));
     this.smoke = this.e.shape(boxG(0.25, 0.25, 0.25), null, [0.35, 0.9, 0.4, 1]);
@@ -586,6 +593,7 @@ export class World {
     const now = ms / 1000, dt = Math.min(0.05, now - (this.last / 1000 || now));
     this.last = ms;
     if (!this.scene) return;
+    if (this.surfOn) { this.surfOn.frame(dt, now); this.interact(); return; }
     this.step(dt, now);
     this.chickenStep(dt, now);
     this.events.update(dt, now);

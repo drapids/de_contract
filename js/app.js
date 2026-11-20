@@ -575,7 +575,7 @@ function toSite() {
 async function toWorld() {
   if (!world) {
     const { World } = await import('./world/world.js');
-    world = new World($('#world'), { loader, sfx, data: () => ({ db: S.db, prices: S.prices }), skin: S.settings.skin || 'sas', status: worldStatus, volume: () => S.settings.vol, onTerminal: () => { sfx.beep?.(true); toSite(); }, onEvent: e => { if (e === 'terminal') sfx.key?.(); } });
+    world = new World($('#world'), { loader, sfx, data: () => ({ db: S.db, prices: S.prices }), imgProxy: u => u && S.settings.worker ? S.settings.worker.replace(/\/$/, '') + '/img?u=' + encodeURIComponent(u) : '', skin: S.settings.skin || 'sas', status: worldStatus, volume: () => S.settings.vol, onTerminal: () => { sfx.beep?.(true); toSite(); }, onEvent: e => { if (e === 'terminal') sfx.key?.(); } });
     window.dc.world = world;
     await world.ready;
   }

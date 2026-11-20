@@ -62,6 +62,14 @@ export default {
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
+    if (url.pathname === '/img') {
+      const u = url.searchParams.get('u') || '';
+      let host = '';
+      try { host = new URL(u).hostname; } catch {}
+      if (!/(^|\.)steamstatic\.com$|(^|\.)steamcommunity\.com$/.test(host)) return json({ error: 'nope' }, 400);
+      const r = await fetch(u, { headers: UA, cf: { cacheTtl: 86400 } });
+      return new Response(r.body, { status: r.status, headers: { ...CORS, 'Content-Type': r.headers.get('content-type') || 'image/png', 'Cache-Control': 'public, max-age=86400' } });
+    }
     if (env.SITE_KEY && req.headers.get('x-key') !== env.SITE_KEY) return json({ error: 'wrong key' }, 401);
     try {
       if (url.pathname === '/scan' && req.method === 'POST') return await scan(env);

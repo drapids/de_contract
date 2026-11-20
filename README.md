@@ -63,3 +63,13 @@ drop mp3s into `assets/voice/` named by when they play (`dubs_1.mp3`, `fail_1.mp
 - floats arent in the free price data so it assumes the top of each wear (worst case). real floats are usually better
 - fees: steam takes ~13% (5% + 10%)
 - not financial advice, the market moves fast
+
+## surf
+
+the pc in the yard has the surf servers. real css/csgo surf maps converted to run in the browser (kitsune, mesa, phantasia, unrequited, demise, surreal, eternity). css movement: 800 gravity, 150 airaccelerate, autobhop. every new stage pays scrap, finishing pays more. pick a skin from your inventory to hold while you surf. v switches first/third person.
+
+## credits
+
+- surf maps belong to their mappers, converted for private use
+- "FP arms" by DJMaesen on sketchfab (CC-BY-4.0): https://sketchfab.com/3d-models/fp-arms-06ee1407117d4e5ab343becb4ee44bb6
+- animations from mixamo and quaternius
