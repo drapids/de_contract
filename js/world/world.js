@@ -10,7 +10,7 @@ import { Wheel } from './wheel.js';
 import { Events } from './events.js';
 import { Blyat } from './blyat.js';
 import { Extras } from './extras.js';
-import { Surf } from './surf.js';
+import { Surf, lockMouse } from './surf.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -75,17 +75,18 @@ export class World {
       this.keys.add(k);
       if (e.shiftKey) this.keys.add('shift');
       if (k === 'e' && !e.repeat) this.use();
-      if ((k === 'v' || k === 'м') && !e.repeat && !this.surfOn && !this.busy) { this.fp = !this.fp; this.slock = false; if (this.fp) this.canvas.requestPointerLock?.(); else document.exitPointerLock?.(); }
-      if ((k === 'q' || k === 'й') && !e.repeat && !this.surfOn && !this.busy) { this.slock = !this.slock; this.fp = false; if (this.slock) this.canvas.requestPointerLock?.(); else document.exitPointerLock?.(); }
+      if ((k === 'v' || k === 'м') && !e.repeat && !this.surfOn && !this.busy) { this.fp = !this.fp; this.slock = false; if (this.fp) lockMouse(this.canvas); else document.exitPointerLock?.(); }
+      if ((k === 'q' || k === 'й') && !e.repeat && !this.surfOn && !this.busy) { this.slock = !this.slock; this.fp = false; if (this.slock) lockMouse(this.canvas); else document.exitPointerLock?.(); }
       if ((k === 'f' || k === 'а') && !e.repeat && !this.busy && !this.kickS && !this.seated) this.dropkick();
       this.$('.w-hint').classList.add('gone');
     });
     addEventListener('keyup', e => { this.keys.delete(e.key.toLowerCase()); if (!e.shiftKey) this.keys.delete('shift'); });
     addEventListener('blur', () => this.keys.clear());
     let drag = null;
-    this.canvas.addEventListener('pointerdown', e => { if ((this.fp || this.slock) && !this.surfOn && document.pointerLockElement !== this.canvas && !this.busy) this.canvas.requestPointerLock?.(); drag = [e.clientX, e.clientY]; this.canvas.setPointerCapture(e.pointerId); });
+    this.canvas.addEventListener('pointerdown', e => { if ((this.fp || this.slock) && !this.surfOn && document.pointerLockElement !== this.canvas && !this.busy) lockMouse(this.canvas); drag = [e.clientX, e.clientY]; this.canvas.setPointerCapture(e.pointerId); });
     addEventListener('mousemove', e => {
       if (this.surfOn || !this.active || document.pointerLockElement !== this.canvas) return;
+      if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
       this.cam.yaw -= e.movementX * 0.0028;
       this.cam.pitch = Math.max(this.fp ? -1.3 : -0.2, Math.min(this.fp ? 1.3 : 1.1, this.cam.pitch + e.movementY * 0.0024));
       this.camTouched = performance.now();
@@ -582,42 +583,46 @@ export class World {
       const l = Math.hypot(wx, wz); wx /= l; wz /= l;
     }
     const sp = run ? 3.4 : 1.45;
+    const hv = this.hv, accel = (dir, wish, a, cap) => {
+      const add = Math.min(wish, cap) - (hv[0] * dir[0] + hv[1] * dir[1]);
+      if (add <= 0) return;
+      const as = Math.min(a * wish * dt, add);
+      hv[0] += as * dir[0]; hv[1] += as * dir[1];
+    };
+    let jumped = false;
     if (kick) {
       kick.t += dt;
       if (kick.t > 0.25 && kick.t < 0.95) { av.pos[0] += kick.d[0] * 3.4 * dt; av.pos[2] += kick.d[1] * 3.4 * dt; }
       if (!kick.hit && kick.t > 0.5) { kick.hit = true; this.kickHit(kick.d); }
-      this.hv = [0, 0];
+      hv[0] = hv[1] = 0;
     } else if (!air) {
-      const carry = now - (this.landT || 0) < 0.2 && this.hops > 0 ? Math.hypot(...this.hv) : 0;
-      const tgt = Math.max(sp, carry);
-      this.hv = [wx * tgt, wz * tgt];
       if (k.has(' ') && !this.busy && !this.seated) {
-        this.hops = now - (this.landT || 0) < 0.2 ? Math.min((this.hops || 0) + 1, 8) : 1;
-        const boost = 1 + (this.hops - 1) * 0.09;
-        this.hv = [this.hv[0] * boost, this.hv[1] * boost];
+        jumped = true;
+        this.hops = now - (this.landT || 0) < 0.25 ? Math.min((this.hops || 0) + 1, 99) : 1;
         this.vy = 4.7;
-        av.play('Jump', true); av.onDone = null;
+        av.play('Jump_Start', true); av.onDone = null;
         this.idle = 0;
+      } else {
+        const s0 = Math.hypot(hv[0], hv[1]);
+        if (s0 > 0.001) { const drop = Math.max(s0, 1.2) * 7 * dt, ns = Math.max(0, s0 - drop) / s0; hv[0] *= ns; hv[1] *= ns; }
       }
-    } else {
-      const hs = Math.hypot(...this.hv);
-      if (moving && hs > 0.05) {
-        const cur = Math.atan2(this.hv[0], this.hv[1]), want = Math.atan2(wx, wz);
-        let d = want - cur; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
-        const nd = cur + Math.max(-2.6 * dt, Math.min(2.6 * dt, d));
-        this.hv = [Math.sin(nd) * hs, Math.cos(nd) * hs];
-      } else if (moving) this.hv = [wx * sp * 0.6, wz * sp * 0.6];
-    }
+      if (moving) accel([wx, wz], sp, jumped ? 0 : 11, sp);
+    } else if (moving) accel([wx, wz], sp, 40, 0.42);
+    const top = 9, hsp = Math.hypot(hv[0], hv[1]);
+    if (hsp > top) { hv[0] *= top / hsp; hv[1] *= top / hsp; }
     if (air || this.vy > 0) {
       this.vy -= 14 * dt;
       av.pos[1] = Math.max(0, av.pos[1] + this.vy * dt);
       if (av.pos[1] <= 0 && this.vy < 0) {
         this.vy = 0; this.landT = now;
-        if (!k.has(' ')) { this.hops = 0; if (!kick) { av.play(Math.hypot(...this.hv) > 0.1 ? (run ? 'Jog_Fwd_Loop' : 'Walk_Loop') : 'Jump_Land', !Math.hypot(...this.hv)); av.onDone = () => av.play('Idle_Loop'); } }
+        if (!k.has(' ') && !kick) { this.hops = 0; const m = Math.hypot(hv[0], hv[1]); av.play(m > 0.3 ? (m > 2.5 ? 'Jog_Fwd_Loop' : 'Walk_Loop') : 'Jump_Land', m <= 0.3); av.onDone = () => av.play('Idle_Loop'); }
       }
     }
-    av.pos[0] += this.hv[0] * dt; av.pos[2] += this.hv[1] * dt;
+    av.pos[0] += hv[0] * dt; av.pos[2] += hv[1] * dt;
+    const ex = av.pos[0], ez = av.pos[2];
     this.collide(av.pos, 0.28);
+    const px = av.pos[0] - ex, pz = av.pos[2] - ez, pl = Math.hypot(px, pz);
+    if (pl > 1e-5) { const nx = px / pl, nz = pz / pl, vn = hv[0] * nx + hv[1] * nz; if (vn < 0) { hv[0] -= nx * vn; hv[1] -= nz * vn; } }
     const hs = Math.hypot(...this.hv);
     if (lock && !kick) av.yaw = this.cam.yaw;
     else if (hs > 0.1 && !kick) {
@@ -625,7 +630,7 @@ export class World {
       let d = want - av.yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
       av.yaw += d * Math.min(1, dt * 10);
     }
-    if (!air && !kick) {
+    if (!air && !kick && !jumped) {
       if (moving) {
         av.play(run || hs > 2.5 ? (hs > 4 ? 'Fast_Run' : 'Jog_Fwd_Loop') : 'Walk_Loop');
         this.idle = 0;
@@ -636,7 +641,7 @@ export class World {
       } else if (!this.busy && !this.seated) {
         this.idle += dt;
         const cur = av.cur;
-        if (['Walk_Loop', 'Jog_Fwd_Loop', 'Fast_Run'].includes(cur)) av.play('Idle_Loop');
+        if (['Walk_Loop', 'Jog_Fwd_Loop', 'Fast_Run', 'Jump_Start', 'Jump'].includes(cur)) av.play('Idle_Loop');
         if (this.idle > 14 && cur === 'Idle_Loop') av.play(Math.random() < 0.5 ? 'Idle_TalkingPhone_Loop' : 'Idle_FoldArms_Loop');
       }
     }

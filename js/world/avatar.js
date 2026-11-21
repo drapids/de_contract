@@ -1,6 +1,8 @@
 import { M4, Q } from '../guy.js';
 
 let clipsP = null;
+const TRAVEL = new Set(['Drop_Kick', 'Jump', 'Big_Jump', 'Run_To_Flip', 'Wall_Run', 'Fast_Run', 'Knocked_Out', 'Moonwalk']);
+const SWAY = new Set(['Northern_Soul_Spin_Combo', 'Breakdance_Footwork_1', 'Sitting_Laughing']);
 
 export class Avatar {
   constructor(eng) {
@@ -20,9 +22,16 @@ export class Avatar {
     const e = this.e;
     clipsP ||= e.json('assets/anims.json');
     this.clips = await clipsP;
-    for (const c of Object.values(this.clips)) {
+    for (const [name, c] of Object.entries(this.clips)) {
       if (c.rmean) continue;
       c.rmean = [0, 1, 2].map(i => { let a = 0; for (let f = 0; f < c.n; f++) a += c.r[f * 3 + i]; return a / c.n; });
+      const mode = TRAVEL.has(name) ? 1 : SWAY.has(name) ? 2 : 0;
+      if (!mode) continue;
+      c.rx = new Float32Array(c.n); c.rz = new Float32Array(c.n);
+      for (const [i, out] of [[0, c.rx], [2, c.rz]]) {
+        const a = c.r[i], b = c.r[(c.n - 1) * 3 + i];
+        for (let f = 0; f < c.n; f++) out[f] = c.r[f * 3 + i] - (mode === 1 ? a + (b - a) * f / Math.max(1, c.n - 1) : c.rmean[i]);
+      }
     }
     await this.setSkin(skin);
   }
@@ -57,6 +66,7 @@ export class Avatar {
     for (const k in c.b) { const v = c.b[k]; p[k] = Q.nlerp(v.slice(a * 4, a * 4 + 4), v.slice(b * 4, b * 4 + 4), u); }
     const H = this.rig.hip, r = c.r;
     const ry = (r[a * 3 + 1] * (1 - u) + r[b * 3 + 1] * u) * H;
+    if (c.rx) return { p, root: [(c.rx[a] * (1 - u) + c.rx[b] * u) * H, ry, (c.rz[a] * (1 - u) + c.rz[b] * u) * H], done: !loop && f >= c.n - 1 };
     return { p, root: [c.rmean[0] * H, ry, c.rmean[2] * H], done: !loop && f >= c.n - 1 };
   }
 
