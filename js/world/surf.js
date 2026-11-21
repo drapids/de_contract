@@ -18,6 +18,7 @@ const TICK = 1 / 100;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const D = Math.PI / 180;
+export const lockMouse = c => { try { const p = c.requestPointerLock?.({ unadjustedMovement: true }); p?.catch?.(() => { try { c.requestPointerLock(); } catch (e) {} }); } catch (e) { try { c.requestPointerLock(); } catch (e2) {} } };
 
 export class Col {
   constructor(buf) {
@@ -136,10 +137,12 @@ export class Surf {
     });
     addEventListener('keyup', e => this.keys.delete(e.key.toLowerCase()));
     addEventListener('blur', () => this.keys.clear());
-    w.canvas.addEventListener('click', () => { if (this.on && this.map && document.pointerLockElement !== w.canvas) w.canvas.requestPointerLock?.(); });
+    w.canvas.addEventListener('click', () => { if (this.on && this.map && document.pointerLockElement !== w.canvas) lockMouse(w.canvas); });
     addEventListener('mousemove', e => {
       if (!this.on || !this.map || document.pointerLockElement !== w.canvas) return;
+      if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
       this.yaw -= e.movementX * 0.022 * 2.2;
+      this.yaw = ((this.yaw % 360) + 360) % 360;
       this.pitch = Math.max(-89, Math.min(89, this.pitch + e.movementY * 0.022 * 2.2));
     });
     document.addEventListener('pointerlockchange', () => { this.$('.sf-click').hidden = document.pointerLockElement === w.canvas; });
@@ -217,7 +220,7 @@ export class Surf {
     if (it) this.makeCard(it);
     w.av.play('Idle_Loop');
     w.surfOn = this;
-    w.canvas.requestPointerLock?.();
+    lockMouse(w.canvas);
     this.msg(m.name + ' · good luck', 2500);
   }
 
@@ -427,8 +430,11 @@ export class Surf {
     if (this.view === 'third') {
       const back = 130, tgt = [eyeS[0], eyeS[1], eyeS[2] - 6];
       const end = [tgt[0] - fS[0] * back, tgt[1] - fS[1] * back, tgt[2] - fS[2] * back + 14];
-      const tr = m.col.trace(tgt, end, [-4, -4, -4], [4, 4, 4]);
-      eye = ours(tr.e);
+      const tr = m.col.trace(tgt, end, [-6, -6, -6], [6, 6, 6]);
+      const want = tr.f;
+      this.camF = Math.min(want, (this.camF ?? want) + dt * 1.5);
+      const k = this.camF;
+      eye = ours([tgt[0] + (end[0] - tgt[0]) * k, tgt[1] + (end[1] - tgt[1]) * k, tgt[2] + (end[2] - tgt[2]) * k]);
     }
     const asp = e.canvas.width / e.canvas.height;
     const VP = M4.mul(M4.persp(1.25, asp, 0.05, 900), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
@@ -457,7 +463,8 @@ export class Surf {
     av.update(dt);
     const vy = Math.atan2(this.vel[1], this.vel[0]) / D;
     const face = (mode === 'idle' || sp < 40) ? this.yaw : vy;
-    this.faceY = this.faceY == null ? face : this.faceY + (((face - this.faceY + 540) % 360) - 180) * Math.min(1, dt * 10);
+    const wrap = x => (((x % 360) + 540) % 360) - 180;
+    this.faceY = this.faceY == null ? face : wrap(this.faceY + wrap(face - this.faceY) * Math.min(1, dt * 10));
     const n = this.lastTouch || [0, 0, 1];
     const tilt = surfing || (this.mode === 'air' && performance.now() - (this.touchT || 0) < 400) ? 1 : 0;
     this.tiltK = (this.tiltK || 0) + (tilt - (this.tiltK || 0)) * Math.min(1, dt * 8);
@@ -477,8 +484,8 @@ export class Surf {
     }
     av.modelOverride = m;
     if (this.view === 'third') av.draw();
-    if (this.card && av.W) {
-      if (this.view === 'third') e.draw(this.card, M4.mul(m, this.cardModel(av, now)), { unlit: 1 });
+    if (this.view === 'third' && av.W) {
+      if (this.card) e.draw(this.card, M4.mul(m, this.cardModel(av, now)), { unlit: 1 });
     }
     av.modelOverride = null;
     if (this.view === 'first' && this.arms) {
