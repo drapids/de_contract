@@ -13,11 +13,12 @@ export class Bank {
     this.s = this.load();
     const el = this.el = document.createElement('div');
     el.className = 'bank';
-    el.innerHTML = `<div class="bk-row"><span class="bk-rub"></span><span class="bk-scrap"></span><button class="bk-inv" title="inventory (i)">inventory</button><button class="bk-inv bk-book" title="blyatlingo (b)">blyatlingo</button></div><div class="bk-rank"></div><div class="bk-drop"><i></i><span></span></div>`;
+    el.innerHTML = `<div class="bk-row"><span class="bk-rub"></span><span class="bk-scrap"></span><button class="bk-inv" title="inventory (i)">inventory</button><button class="bk-inv bk-book" title="blyatlingo (b)">blyatlingo</button><button class="bk-inv bk-set" title="settings">settings</button></div><div class="bk-rank"></div><div class="bk-drop"><i></i><span></span></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('.bk-inv').onclick = () => !w.busy && w.loot?.inventory();
     this.$('.bk-book').onclick = () => !w.busy && w.blyat?.open();
+    this.$('.bk-set').onclick = () => w.settings?.open();
     this.render();
     setInterval(() => this.render(), 30000);
   }

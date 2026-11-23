@@ -1,6 +1,7 @@
 import { M4, Q, boxG } from './engine.js';
 import { TIER_COLORS } from '../tradeup.js';
 import { CS2, weaponKey, mulM } from './cs2.js';
+import { set, vfov } from './settings.js';
 
 export const MAPS = [
   { id: 'surf_kitsune', name: 'surf_kitsune', tier: 1 },
@@ -122,11 +123,12 @@ export class Surf {
     el.hidden = true;
     el.innerHTML = `<div class="sf-pick win"><div class="dlg-t"><span>surf servers</span><button class="x" data-x>x</button></div>
       <p class="dim" style="padding:6px 8px 0">real cs surf maps. every new stage you reach pays scrap, finishing pays a lot more. hold a skin from your inventory while you surf.</p>
-      <div class="sf-maps"></div><div class="sf-hold"><span>holding:</span><select class="sel"></select></div></div>
-      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-fps"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · f inspect · v first/third person · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div>`;
+      <div class="sf-maps"></div><div class="sf-hold"><span>holding:</span><select class="sel"></select><button class="btn" data-set>settings</button></div></div>
+      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-fps"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · f inspect · v first/third person · o settings · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('[data-x]').onclick = () => this.close();
+    this.$('[data-set]').onclick = () => w.settings?.open();
     addEventListener('keydown', e => {
       if (!this.on || !this.map) return;
       const k = e.key.toLowerCase();
@@ -134,6 +136,7 @@ export class Surf {
       if (e.key === 'Escape') { this.exit(); return; }
       if (k === 'v' && !e.repeat) this.view = this.view === 'first' ? 'third' : 'first';
       if (k === 'r' && !e.repeat) this.respawn(true);
+      if (k === 'o' && !e.repeat) { this.keys.clear(); w.settings?.open(); return; }
       if (k === 'f' && !e.repeat) this.inspect();
       this.keys.add(k);
     });
@@ -142,10 +145,11 @@ export class Surf {
     w.canvas.addEventListener('click', () => { if (this.on && this.map && document.pointerLockElement !== w.canvas) lockMouse(w.canvas); });
     addEventListener('mousemove', e => {
       if (!this.on || !this.map || document.pointerLockElement !== w.canvas) return;
-      if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
-      this.yaw -= e.movementX * 0.022 * 2.2;
+      if (Math.abs(e.movementX) > 2500 || Math.abs(e.movementY) > 2500) return;
+      const k = set.sens * 0.022;
+      this.yaw -= e.movementX * k;
       this.yaw = ((this.yaw % 360) + 360) % 360;
-      this.pitch = Math.max(-89, Math.min(89, this.pitch + e.movementY * 0.022 * 2.2));
+      this.pitch = Math.max(-89, Math.min(89, this.pitch + e.movementY * k * (set.invert ? -1 : 1)));
     });
     document.addEventListener('pointerlockchange', () => { this.$('.sf-click').hidden = document.pointerLockElement === w.canvas; });
   }
@@ -319,7 +323,7 @@ export class Surf {
     const o = [eye[0] + r[0] * sx + u[0] * bobU, eye[1] + r[1] * sx + u[1] * bobU, eye[2] + r[2] * sx + u[2] * bobU];
     const M = new Float32Array([f[0] * k, f[1] * k, f[2] * k, 0, -r[0] * k, -r[1] * k, -r[2] * k, 0, u[0] * k, u[1] * k, u[2] * k, 0, o[0], o[1], o[2], 1]);
     const asp = e.canvas.width / e.canvas.height;
-    const VP = M4.mul(M4.persp(0.94, asp, 0.01, 50), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
+    const VP = M4.mul(M4.persp(vfov(set.vmfov, asp), asp, 0.01, 50), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
     const keep = e.VP;
     e.VP = VP;
     e.gl.clear(e.gl.DEPTH_BUFFER_BIT);
@@ -559,7 +563,7 @@ export class Surf {
       eye = ours([tgt[0] + (end[0] - tgt[0]) * k, tgt[1] + (end[1] - tgt[1]) * k, tgt[2] + (end[2] - tgt[2]) * k]);
     }
     const asp = e.canvas.width / e.canvas.height;
-    const VP = M4.mul(M4.persp(1.25, asp, 0.05, 900), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
+    const VP = M4.mul(M4.persp(vfov(set.fov, asp), asp, 0.05, 900), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
     e.amb = [0.62, 0.62, 0.66];
     e.fog = [0.05, 0.06, 0.09];
     e.fogR = [260, 880];
@@ -578,7 +582,7 @@ export class Surf {
     this.hudT = t;
     const m = this.map, txt = (sel, v) => { const el = this.$(sel); if (el.textContent !== v) el.textContent = v; };
     txt('.sf-speed', String(Math.round(sp)));
-    txt('.sf-fps', F.show ? F.show + ' fps' : '');
+    txt('.sf-fps', F.show && set.fps ? F.show + ' fps' : '');
     txt('.sf-info', `${m.name} · ${this.fmt(t - this.t0)} · stage ${this.reached.size}/${m.total || '?'}`);
   }
 

@@ -11,6 +11,7 @@ import { Events } from './events.js';
 import { Blyat } from './blyat.js';
 import { Extras } from './extras.js';
 import { Surf, lockMouse } from './surf.js';
+import { Settings, set, lookK, vfov } from './settings.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -60,6 +61,7 @@ export class World {
     this.blyat = new Blyat(this);
     this.extras = new Extras(this);
     this.surf = new Surf(this);
+    this.settings = new Settings(this);
     const emit = opts.onEvent;
     this.opts.onEvent = (ev, x) => { this.event(ev, x); emit?.(ev, x); };
     this.npcs = [];
@@ -86,9 +88,10 @@ export class World {
     this.canvas.addEventListener('pointerdown', e => { if ((this.fp || this.slock) && !this.surfOn && document.pointerLockElement !== this.canvas && !this.busy) lockMouse(this.canvas); drag = [e.clientX, e.clientY]; this.canvas.setPointerCapture(e.pointerId); });
     addEventListener('mousemove', e => {
       if (this.surfOn || !this.active || document.pointerLockElement !== this.canvas) return;
-      if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
-      this.cam.yaw -= e.movementX * 0.0028;
-      this.cam.pitch = Math.max(this.fp ? -1.3 : -0.2, Math.min(this.fp ? 1.3 : 1.1, this.cam.pitch + e.movementY * 0.0024));
+      if (Math.abs(e.movementX) > 2500 || Math.abs(e.movementY) > 2500) return;
+      const k = lookK() * (this.fp ? 1 : 3.3), my = e.movementY * (set.invert ? -1 : 1);
+      this.cam.yaw -= e.movementX * k;
+      this.cam.pitch = Math.max(this.fp ? -1.5 : -0.2, Math.min(this.fp ? 1.5 : 1.1, this.cam.pitch + my * k));
       this.camTouched = performance.now();
     });
     this.canvas.addEventListener('pointermove', e => {
@@ -674,7 +677,7 @@ export class World {
       const h = av.head(), f = [Math.sin(c.yaw) * Math.cos(c.pitch), -Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)];
       const eye = [av.pos[0] + Math.sin(av.yaw) * 0.12, h[1] + 0.06, av.pos[2] + Math.cos(av.yaw) * 0.12];
       this.fpEye = { eye, f, yaw: c.yaw, pitch: c.pitch };
-      return M4.mul(M4.persp(1.25, asp0, 0.03, 90), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
+      return M4.mul(M4.persp(vfov(set.fov, asp0), asp0, 0.03, 90), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
     }
     this.fpEye = null;
     const tgt = [av.pos[0], av.pos[1] + (this.seated ? 1.05 : 1.45), av.pos[2]];
