@@ -124,16 +124,22 @@ export class Surf {
     el.innerHTML = `<div class="sf-pick win"><div class="dlg-t"><span>surf servers</span><button class="x" data-x>x</button></div>
       <p class="dim" style="padding:6px 8px 0">real cs surf maps. every new stage you reach pays scrap, finishing pays a lot more. hold a skin from your inventory while you surf.</p>
       <div class="sf-maps"></div><div class="sf-hold"><span>holding:</span><select class="sel"></select><button class="btn" data-set>settings</button></div></div>
-      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-fps"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · f inspect · v first/third person · o settings · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div>`;
+      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-fps"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · f inspect · v first/third person · b switch skin · q last skin · o settings · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div><div class="sf-buy win" hidden><div class="dlg-t"><span>pick what you hold</span><button class="x" data-bx>x</button></div><input class="inp sf-bq" placeholder="search your skins"><div class="sf-bl"></div></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('[data-x]').onclick = () => this.close();
     this.$('[data-set]').onclick = () => w.settings?.open();
+    this.$('[data-bx]').onclick = () => this.closeBuy();
+    this.$('.sf-bq').oninput = () => this.renderBuy();
     addEventListener('keydown', e => {
       if (!this.on || !this.map) return;
       const k = e.key.toLowerCase();
+      if (this.buyOn) { if (e.key === 'Escape' || (k === 'b' && e.target === document.body)) { e.preventDefault(); this.closeBuy(); } return; }
+      if (e.target.closest?.('input, textarea, select')) return;
       if ([' ', 'w', 'a', 's', 'd'].includes(k)) e.preventDefault();
       if (e.key === 'Escape') { this.exit(); return; }
+      if (k === 'b' && !e.repeat) { this.openBuy(); return; }
+      if (k === 'q' && !e.repeat && this.lastIdx >= 0 && this.w.bank.s.inv[this.lastIdx]) { this.equip(this.lastIdx); this.msg(this.held.hash, 1200); return; }
       if (k === 'v' && !e.repeat) this.view = this.view === 'first' ? 'third' : 'first';
       if (k === 'r' && !e.repeat) this.respawn(true);
       if (k === 'o' && !e.repeat) { this.keys.clear(); w.settings?.open(); return; }
@@ -169,7 +175,8 @@ export class Surf {
     const sel = this.$('.sf-hold select');
     sel.innerHTML = '<option value="-1">nothing</option>' + inv.map((it, i) => `<option value="${i}">${esc(it.hash)}</option>`).join('');
     const top = inv.reduce((bi, it, i) => (bi < 0 || this.w.loot.value(it) > this.w.loot.value(inv[bi])) ? i : bi, -1);
-    sel.value = String(this.holdIdx ?? top);
+    const h = this.w.bank.s.hold;
+    sel.value = String(inv[h] ? h : top);
   }
 
   close() {
@@ -182,7 +189,8 @@ export class Surf {
 
   async start(m) {
     const w = this.w, e = this.e;
-    this.holdIdx = +this.$('.sf-hold select').value;
+    this.holdIdx = -2;
+    this.pickIdx = +this.$('.sf-hold select').value;
     this.$('.sf-pick').hidden = true;
     this.$('.sf-hud').hidden = false;
     const ld = this.$('.sf-load');
@@ -221,10 +229,8 @@ export class Surf {
     this.finished = false;
     this.acc = 0;
     this.respawn(true);
-    this.card = null;
-    this.gun = null;
-    const it = this.w.bank.s.inv[this.holdIdx];
-    if (it) { this.makeCard(it); this.loadGun(it); }
+    this.held = null;
+    this.equip(this.pickIdx);
     w.av.play('Idle_Loop');
     e.setMode(true);
     this.fps = { n: 0, t: performance.now(), lo: 1e9, show: 0 };
@@ -287,9 +293,57 @@ export class Surf {
     try {
       this.cs2 ||= new CS2(this.e);
       const [arms, wpn, skin] = await Promise.all([this.cs2.load('arms'), this.cs2.load(key), this.cs2.skin(it.hash)]);
-      if (this.w.bank.s.inv[this.holdIdx] !== it) return;
+      if (this.held !== it) return;
       this.gun = { key, arms, wpn, skin, clip: 'idle', t0: performance.now() / 1000 };
     } catch (err) { this.gun = null; }
+  }
+
+  equip(i) {
+    const inv = this.w.bank.s.inv, it = inv[i] || null;
+    if (it === this.held && (this.gun || this.card || !it)) return;
+    if (this.holdIdx !== i && this.holdIdx >= 0) this.lastIdx = this.holdIdx;
+    this.holdIdx = it ? i : -1;
+    this.w.bank.s.hold = this.holdIdx;
+    this.w.bank.save();
+    this.held = it;
+    this.card = null;
+    this.gun = null;
+    if (!it) return;
+    if (this.map) this.makeCard(it);
+    this.loadGun(it);
+  }
+
+  heldNow() {
+    const inv = this.w.bank.s.inv, i = this.w.bank.s.hold ?? -1;
+    if (this.held && inv.includes(this.held)) return this.held;
+    if (inv[i]) { this.equip(i); return this.held; }
+    return null;
+  }
+
+  openBuy() {
+    this.buyOn = true;
+    this.keys.clear();
+    document.exitPointerLock?.();
+    const b = this.$('.sf-buy');
+    b.hidden = false;
+    const q = this.$('.sf-bq');
+    q.value = '';
+    this.renderBuy();
+    setTimeout(() => q.focus(), 0);
+  }
+
+  closeBuy() {
+    this.buyOn = false;
+    this.$('.sf-buy').hidden = true;
+    if (this.map) lockMouse(this.w.canvas);
+  }
+
+  renderBuy() {
+    const inv = this.w.bank.s.inv, q = this.$('.sf-bq').value.trim().toLowerCase();
+    const rows = inv.map((it, i) => [it, i]).filter(([it]) => !q || it.hash.toLowerCase().includes(q)).reverse();
+    rows.sort((a, b) => (b[0].r === 6) - (a[0].r === 6));
+    this.$('.sf-bl').innerHTML = rows.length ? rows.map(([it, i]) => `<button class="sf-bi${i === this.holdIdx ? ' on' : ''}" data-i="${i}" style="--c:${TIER_COLORS[it.r]}">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : ''}<span>${esc(it.hash)}</span><em>${(it.f ?? 0).toFixed(4)}</em></button>`).join('') : '<p class="dim">nothing here. open cases or use the console</p>';
+    this.$('.sf-bl').querySelectorAll('[data-i]').forEach(el => el.onclick = () => { this.equip(+el.dataset.i); this.closeBuy(); this.msg(this.held ? this.held.hash : 'empty hands', 1500); });
   }
 
   inspect() {
@@ -306,20 +360,21 @@ export class Surf {
   }
 
   drawGun(now) {
+    const y = this.yaw * D, p = this.pitch * D;
+    const fS = [Math.cos(p) * Math.cos(y), Math.cos(p) * Math.sin(y), -Math.sin(p)];
+    const R = this.rpos || this.pos;
+    const run = this.ground ? Math.min(1, Math.hypot(this.vel[0], this.vel[1]) / 250) : 0;
+    this.vm(now, [R[0] * S, (R[2] + 64) * S, -R[1] * S], [fS[0], fS[2], -fS[1]], [Math.sin(y), 0, Math.cos(y)], S / 0.0254, run, this.landK || 0, this.swX || 0, this.swY || 0);
+  }
+
+  vm(now, eye, f, r, k, run, land, swX, swY) {
     const g = this.gun, cs = this.cs2, e = this.e;
     const { c, t } = this.gunClip(now);
     cs.pose(g.arms, c, t, g.clip === 'idle');
     cs.pose(g.wpn, c, t, g.clip === 'idle');
-    const y = this.yaw * D, p = this.pitch * D;
-    const fS = [Math.cos(p) * Math.cos(y), Math.cos(p) * Math.sin(y), -Math.sin(p)];
-    const f = [fS[0], fS[2], -fS[1]];
-    const r = [Math.sin(y), 0, Math.cos(y)];
     const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
-    const R = this.rpos || this.pos, k = S / 0.0254;
-    const eye = [R[0] * S, (R[2] + 64) * S, -R[1] * S];
-    const land = this.landK || 0, run = this.ground ? Math.min(1, Math.hypot(this.vel[0], this.vel[1]) / 250) : 0;
-    const bob = Math.sin(now * 8.5) * 0.004 * run, bobU = -Math.abs(Math.cos(now * 8.5)) * 0.005 * run - land * 0.02 + (this.swY || 0) * 0.3;
-    const sx = (this.swX || 0) * 0.3 + bob;
+    const bob = Math.sin(now * 8.5) * 0.004 * run, bobU = -Math.abs(Math.cos(now * 8.5)) * 0.005 * run - land * 0.02 + swY * 0.3;
+    const sx = swX * 0.3 + bob;
     const o = [eye[0] + r[0] * sx + u[0] * bobU, eye[1] + r[1] * sx + u[1] * bobU, eye[2] + r[2] * sx + u[2] * bobU];
     const M = new Float32Array([f[0] * k, f[1] * k, f[2] * k, 0, -r[0] * k, -r[1] * k, -r[2] * k, 0, u[0] * k, u[1] * k, u[2] * k, 0, o[0], o[1], o[2], 1]);
     const asp = e.canvas.width / e.canvas.height;
