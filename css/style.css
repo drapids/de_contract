@@ -575,3 +575,26 @@ body .world-ui:has(.sf-hud:not([hidden])) .w-hint, body .world-ui:has(.sf-hud:no
 .sf-bi.on { outline: 2px solid var(--gold); }
 .sf-bi img { width: 110px; height: 80px; object-fit: contain; }
 .sf-bi em { color: var(--gold); font-style: normal; }
+.devc { position: absolute; inset: 0; z-index: 70; pointer-events: auto; display: grid; place-items: center; background: rgba(0,0,0,.4); }
+.devc[hidden] { display: none; }
+.dv-win { width: min(980px, 96vw); height: min(640px, 92vh); display: flex; flex-direction: column; }
+.dv-top { display: flex; gap: 6px; align-items: center; padding: 6px 8px; }
+.dv-top .dv-q { flex: 1; min-width: 0; }
+.dv-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 300px; gap: 8px; padding: 0 8px; }
+.dv-list { overflow: auto; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--lo); background: rgba(0,0,0,.2); }
+.dv-row { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 0; border-left: 3px solid var(--c); padding: 2px 6px; color: var(--text); font: 11px var(--font); text-align: left; }
+.dv-row.on { outline: 1px solid var(--gold); }
+.dv-row img, .dv-row i { width: 48px; height: 36px; object-fit: contain; flex: none; }
+.dv-row span { flex: 1; }
+.dv-row em { color: var(--gold); font-style: normal; font-size: 10px; }
+.dv-pick { overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.dv-big { width: 100%; height: 170px; object-fit: contain; background: rgba(0,0,0,.2); }
+.dv-wears { display: flex; gap: 3px; }
+.dv-wears .btn { flex: 1; padding: 2px 0; }
+.dv-wears .btn.on { outline: 1px solid var(--gold); }
+.dv-fl { display: flex; gap: 6px; align-items: center; }
+.dv-fl input[type=range] { flex: 1; }
+.dv-fl .inp { width: 80px; }
+.dv-pick .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.dv-out { height: 70px; overflow: auto; margin: 6px 8px 0; padding: 4px 6px; background: rgba(0,0,0,.35); font: 11px monospace; color: #cfd8c0; }
+.dv-cmd { margin: 4px 8px 8px; font-family: monospace; }
