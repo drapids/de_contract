@@ -559,3 +559,11 @@ body.dragging-guy, body.dragging-guy * { cursor: url(../assets/ui/cur_aim.png) 1
 .sf-click { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); background: rgba(196,181,80,.9); color: #111; padding: 3px 10px; font-weight: bold; }
 body .world-ui:has(.sf-hud:not([hidden])) .w-hint, body .world-ui:has(.sf-hud:not([hidden])) .w-where, body .world-ui:has(.sf-pick:not([hidden])) .w-hint { display: none; }
 .solo [hidden] { display: none !important; }
+.setw { position: absolute; inset: 0; z-index: 60; pointer-events: auto; display: grid; place-items: center; background: rgba(0,0,0,.35); }
+.setw[hidden] { display: none; }
+.set-win { width: 300px; }
+.set-body { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
+.set-body label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.set-body label .inp { width: 70px; }
+.set-body input[type=range] { width: 100%; }
+.set-body .row { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
