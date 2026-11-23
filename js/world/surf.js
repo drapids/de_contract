@@ -122,7 +122,7 @@ export class Surf {
     el.innerHTML = `<div class="sf-pick win"><div class="dlg-t"><span>surf servers</span><button class="x" data-x>x</button></div>
       <p class="dim" style="padding:6px 8px 0">real cs surf maps. every new stage you reach pays scrap, finishing pays a lot more. hold a skin from your inventory while you surf.</p>
       <div class="sf-maps"></div><div class="sf-hold"><span>holding:</span><select class="sel"></select></div></div>
-      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · v first/third person · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div>`;
+      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-fps"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · v first/third person · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('[data-x]').onclick = () => this.close();
@@ -195,7 +195,7 @@ export class Surf {
       const I = new Uint32Array(geo, 16 + nv * 32, ni);
       const mesh = e.mesh({ P, N, U, I });
       const groups = [];
-      for (const g of meta.groups) groups.push({ start: g.start, count: g.count, tex: await e.texUrl(base + g.tex, true), tint: [1, 1, 1, 1] });
+      for (const g of meta.groups) groups.push({ start: g.start, count: g.count, tex: await e.texUrl(base + g.tex, true, false, true), tint: [1, 1, 1, 1] });
       this.map = { meta, obj: { mesh, groups }, col: new Col(col), id: m.id, name: m.name };
       const dests = new Set();
       for (const t of meta.triggers) if (t.dest) dests.add(t.dest.o.join(','));
@@ -207,7 +207,7 @@ export class Surf {
       return;
     }
     if (!this.arms) {
-      try { const d = await e.json('assets/fp/fparms.json'); this.arms = e.shape({ P: d.pos, N: d.nor, U: d.uv, I: d.idx }, await e.texUrl('assets/fp/fparms.png', false, false)); } catch (err) {}
+      try { const d = await e.json('assets/fp/fparms.json'); this.arms = e.shape({ P: d.pos, N: d.nor, U: d.uv, I: d.idx }, await e.texUrl('assets/fp/fparms.png', false, false, true)); } catch (err) {}
     }
     ld.hidden = true;
     this.reached = new Set();
@@ -219,6 +219,9 @@ export class Surf {
     const it = this.w.bank.s.inv[this.holdIdx];
     if (it) this.makeCard(it);
     w.av.play('Idle_Loop');
+    e.setMode(true);
+    this.fps = { n: 0, t: performance.now(), lo: 1e9, show: 0 };
+    this.hudT = 0;
     w.surfOn = this;
     lockMouse(w.canvas);
     this.msg(m.name + ' · good luck', 2500);
@@ -227,6 +230,7 @@ export class Surf {
   exit() {
     document.exitPointerLock?.();
     this.w.surfOn = null;
+    this.e.setMode(false);
     this.map = null;
     this.keys.clear();
     this.w.av.pose = null;
@@ -248,7 +252,10 @@ export class Surf {
     const tr = this.map.col.trace(this.pos, this.pos);
     if (tr.ss) for (let k = 0; k < 40; k++) { this.pos[2] += 4; if (!this.map.col.trace(this.pos, this.pos).ss) break; }
     this.ground = null;
+    this.snap();
   }
+
+  snap() { this.prev = this.pos.slice(); }
 
   makeCard(it) {
     const c = document.createElement('canvas'); c.width = 128; c.height = 96;
@@ -261,7 +268,7 @@ export class Surf {
       if (this.cardTex) { const gl = this.e.gl; gl.bindTexture(gl.TEXTURE_2D, this.cardTex); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c); }
     };
     draw(null);
-    this.cardTex = this.e.texCanvas(c);
+    this.cardTex = this.e.texCanvas(c, null, false, false, true);
     this.card = this.e.shape({ P: [-0.11, -0.08, 0, 0.11, -0.08, 0, 0.11, 0.08, 0, -0.11, 0.08, 0], N: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1], U: [0, 1, 1, 1, 1, 0, 0, 0], I: [0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2] }, this.cardTex);
     const proxy = this.w.opts.imgProxy?.(it.img);
     if (proxy) { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => { try { draw(im); } catch (e) {} }; im.src = proxy; }
@@ -369,6 +376,7 @@ export class Surf {
       if (!t.b.some(pl => inside(pl, c, h))) continue;
       if (t.dest) {
         this.pos = [t.dest.o[0], t.dest.o[1], t.dest.o[2] + 1];
+        this.snap();
         this.vel = [0, 0, 0];
         this.yaw = t.dest.yaw;
         const key = t.dest.o.join(',');
@@ -417,11 +425,12 @@ export class Surf {
     const w = this.w, e = this.e, m = this.map;
     if (!m) return;
     this.acc = Math.min(this.acc + dt, 0.25);
-    while (this.acc >= TICK) { this.tick(TICK); this.acc -= TICK; }
+    while (this.acc >= TICK) { this.prev = this.pos.slice(); this.tick(TICK); this.acc -= TICK; }
+    const a = this.acc / TICK, pv = this.prev || this.pos;
+    const P = this.rpos = [pv[0] + (this.pos[0] - pv[0]) * a, pv[1] + (this.pos[1] - pv[1]) * a, pv[2] + (this.pos[2] - pv[2]) * a];
     const sp = Math.hypot(this.vel[0], this.vel[1]);
-    this.$('.sf-speed').textContent = Math.round(sp);
-    this.$('.sf-info').innerHTML = `${esc(m.name)} · ${this.fmt(performance.now() - this.t0)} · stage ${this.reached.size}/${m.total || '?'}`;
-    const P = this.pos, eyeS = [P[0], P[1], P[2] + 64];
+    this.hud(sp);
+    const eyeS = [P[0], P[1], P[2] + 64];
     const ours = v => [v[0] * S, v[2] * S, -v[1] * S];
     const y = this.yaw * D, p = this.pitch * D;
     const fS = [Math.cos(p) * Math.cos(y), Math.cos(p) * Math.sin(y), -Math.sin(p)];
@@ -448,6 +457,18 @@ export class Surf {
     this.drawMe(dt, now, ours, sp);
   }
 
+  hud(sp) {
+    const t = performance.now(), F = this.fps;
+    F.n++;
+    if (t - F.t >= 500) { F.show = Math.round(F.n * 1000 / (t - F.t)); F.n = 0; F.t = t; }
+    if (t - this.hudT < 33) return;
+    this.hudT = t;
+    const m = this.map, txt = (sel, v) => { const el = this.$(sel); if (el.textContent !== v) el.textContent = v; };
+    txt('.sf-speed', String(Math.round(sp)));
+    txt('.sf-fps', F.show ? F.show + ' fps' : '');
+    txt('.sf-info', `${m.name} · ${this.fmt(t - this.t0)} · stage ${this.reached.size}/${m.total || '?'}`);
+  }
+
   drawMe(dt, now, ours, sp) {
     const w = this.w, av = w.av, e = this.e;
     const surfing = !this.ground && this.touch && performance.now() - (this.touchT || 0) < 120;
@@ -469,7 +490,7 @@ export class Surf {
     const tilt = surfing || (this.mode === 'air' && performance.now() - (this.touchT || 0) < 400) ? 1 : 0;
     this.tiltK = (this.tiltK || 0) + (tilt - (this.tiltK || 0)) * Math.min(1, dt * 8);
     this.pose(av, now, mode, n, sp);
-    const pos = ours(this.pos);
+    const pos = ours(this.rpos || this.pos);
     const rootYaw = (this.faceY + 90) * D;
     let m = M4.mul(M4.fromQT([0, 0, 0, 1], pos), M4.rotY(rootYaw));
     if (this.tiltK > 0.01) {
@@ -519,7 +540,8 @@ export class Surf {
     const bx = Math.sin(now * 8.5) * 0.012 * run, by = Math.abs(Math.cos(now * 8.5)) * 0.014 * run;
     const land = this.landK = Math.max(0, (this.landK || 0) - dt * 4);
     const ox = this.swX + bx, oy = -0.115 - by + this.swY - land * 0.05 + (this.ground ? 0 : 0.012), oz = -0.07;
-    const eye = [this.pos[0] * S, (this.pos[2] + 64) * S, -this.pos[1] * S];
+    const R = this.rpos || this.pos;
+    const eye = [R[0] * S, (R[2] + 64) * S, -R[1] * S];
     const t = [eye[0] - r[0] * ox + u[0] * oy + f[0] * oz, eye[1] - r[1] * ox + u[1] * oy + f[1] * oz, eye[2] - r[2] * ox + u[2] * oy + f[2] * oz];
     return new Float32Array([-r[0], -r[1], -r[2], 0, u[0], u[1], u[2], 0, f[0], f[1], f[2], 0, t[0], t[1], t[2], 1]);
   }
