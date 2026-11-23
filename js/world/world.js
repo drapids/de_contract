@@ -12,6 +12,7 @@ import { Blyat } from './blyat.js';
 import { Extras } from './extras.js';
 import { Surf, lockMouse } from './surf.js';
 import { Settings, set, lookK, vfov } from './settings.js';
+import { Dev } from './dev.js';
 
 const rotX = a => M4.fromQT(Q.axis([1, 0, 0], a), [0, 0, 0]);
 const rotZ = a => M4.fromQT(Q.axis([0, 0, 1], a), [0, 0, 0]);
@@ -62,6 +63,7 @@ export class World {
     this.extras = new Extras(this);
     this.surf = new Surf(this);
     this.settings = new Settings(this);
+    this.dev = new Dev(this);
     const emit = opts.onEvent;
     this.opts.onEvent = (ev, x) => { this.event(ev, x); emit?.(ev, x); };
     this.npcs = [];
