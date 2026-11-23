@@ -370,21 +370,57 @@ export class Surf {
     this.vel[0] += as * dir[0]; this.vel[1] += as * dir[1]; this.vel[2] += as * dir[2];
   }
 
+  unstick(n) {
+    const col = this.map.col, p = this.pos, dirs = [];
+    if (n) dirs.push(n);
+    dirs.push([0, 0, 1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1]);
+    for (const k of [0.03125, 0.0625, 0.125, 0.25, 0.5, 1, 2, 4]) for (const d of dirs) {
+      const q = [p[0] + d[0] * k, p[1] + d[1] * k, p[2] + d[2] * k];
+      if (!col.trace(q, q).ss) return q;
+    }
+    return null;
+  }
+
   slide(dt) {
     const col = this.map.col;
-    let tl = dt, np = 0;
+    let tl = dt, np = 0, stuck = 0;
     const planes = [], primal = this.vel.slice();
     let orig = this.vel.slice();
     this.touch = null;
-    for (let bump = 0; bump < 4; bump++) {
+    const ramp = n => n[2] > 0.05 && n[2] < 0.7;
+    const keep = () => {
+      const r = planes.find(ramp) || this.touch;
+      let v = primal.slice();
+      if (r) v = clipVel(v, r, 1);
+      for (const q of planes) if (q !== r && dot(v, q) < 0 && Math.abs(q[2]) < 0.7) v = clipVel(v, q, 1);
+      this.vel = v;
+      if (r) { const q = [this.pos[0] + r[0] * 0.0625, this.pos[1] + r[1] * 0.0625, this.pos[2] + r[2] * 0.0625]; if (!col.trace(q, q).ss) this.pos = q; }
+    };
+    for (let bump = 0; bump < 8; bump++) {
       if (!this.vel[0] && !this.vel[1] && !this.vel[2]) break;
-      const end = [this.pos[0] + this.vel[0] * tl, this.pos[1] + this.vel[1] * tl, this.pos[2] + this.vel[2] * tl];
-      const tr = col.trace(this.pos, end);
-      if (tr.as) { this.vel = [0, 0, 0]; return; }
-      if (tr.f > 0) { this.pos = tr.e; orig = this.vel.slice(); np = 0; planes.length = 0; }
+      let end = [this.pos[0] + this.vel[0] * tl, this.pos[1] + this.vel[1] * tl, this.pos[2] + this.vel[2] * tl];
+      let tr = col.trace(this.pos, end);
+      if (tr.as || (tr.f === 0 && stuck > 1)) {
+        const fix = this.unstick(planes[np - 1] || tr.n);
+        if (!fix) break;
+        this.pos = fix; stuck = 0;
+        end = [this.pos[0] + this.vel[0] * tl, this.pos[1] + this.vel[1] * tl, this.pos[2] + this.vel[2] * tl];
+        tr = col.trace(this.pos, end);
+        if (tr.as) break;
+      }
+      if (tr.f > 0) { this.pos = tr.e; orig = this.vel.slice(); np = 0; planes.length = 0; stuck = 0; }
       if (tr.f === 1) break;
-      if (tr.n && tr.n[2] < 0.7 && tr.n[2] > -0.1) this.touch = tr.n;
+      if (!tr.n) break;
+      if (tr.f === 0) stuck++;
+      if (tr.n[2] < 0.7 && tr.n[2] > -0.1) this.touch = tr.n;
       tl -= tl * tr.f;
+      let dup = false;
+      for (let i = 0; i < np; i++) if (dot(tr.n, planes[i]) > 0.99) { dup = true; break; }
+      if (dup) {
+        this.vel = clipVel(this.vel, tr.n, 1);
+        this.vel[0] += tr.n[0]; this.vel[1] += tr.n[1]; this.vel[2] += tr.n[2];
+        continue;
+      }
       planes.push(tr.n); np++;
       if (np === 1 && !this.ground) { this.vel = clipVel(orig, tr.n, 1); orig = this.vel.slice(); continue; }
       let i;
@@ -395,12 +431,12 @@ export class Surf {
         if (j === np) break;
       }
       if (i === np) {
-        if (np !== 2) { this.vel = [0, 0, 0]; break; }
+        if (np !== 2) { if (!this.ground && planes.some(ramp)) { keep(); break; } this.vel = [0, 0, 0]; break; }
         const a = planes[0], b = planes[1], dir = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
         const d = dot(dir, this.vel);
         this.vel = [dir[0] * d, dir[1] * d, dir[2] * d];
       }
-      if (dot(this.vel, primal) <= 0) { this.vel = [0, 0, 0]; break; }
+      if (dot(this.vel, primal) <= 0) { if (!this.ground && planes.some(ramp)) { keep(); break; } this.vel = [0, 0, 0]; break; }
     }
   }
 
