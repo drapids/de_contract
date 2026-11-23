@@ -62,11 +62,19 @@ drop mp3s into `assets/voice/` named by when they play (`dubs_1.mp3`, `fail_1.mp
 - steam only lets you pull so many prices at once so the scanner walks through the steam market a chunk at a time
 - floats arent in the free price data so it assumes the top of each wear (worst case). real floats are usually better
 - fees: steam takes ~13% (5% + 10%)
+- when steam doesnt have enough listings for something (knives a lot of the time) it uses skinport sales instead (7 day / 30 day median, then 90 day or the cheapest listing). if nothing has a price it says "no price" and that outcome gets left out of worst case + ev instead of counting as $0
+- skinport numbers are after their 8% fee
 - not financial advice, the market moves fast
 
 ## surf
 
 the pc in the yard has the surf servers. real css/csgo surf maps converted to run in the browser (kitsune, mesa, phantasia, unrequited, demise, surreal, eternity). css movement: 800 gravity, 150 airaccelerate, autobhop. every new stage pays scrap, finishing pays more. pick a skin from your inventory to hold while you surf. v switches first/third person.
+
+surf renders at full res with anti aliasing (the basement stays ps1). it runs as fast as your monitor refreshes, so 180hz = 180 fps. theres an fps counter top left. if its stuck at 60 check windows display settings > advanced display > refresh rate, and make sure chrome is on the nvidia gpu.
+
+## just the trade up site
+
+`solelytradeup/` is the same site without the basement, the guy or any 3d. same data, same key, same settings. its at `https://drapids.github.io/de_contract/solelytradeup/`
 
 ## credits
 
