@@ -62,6 +62,26 @@ function skinportSell(h) {
   return null;
 }
 
+function hardSell(h) {
+  const c = steamCache[h], v = verified[h];
+  const ask = v?.lo || c?.[0] || 0, q = c?.[1] ?? 0;
+  if (ask && (v ? v.vol >= 1 || q >= MIN_SELL_LISTINGS : q >= MIN_SELL_LISTINGS)) return netAfterFee('steam', Math.max(1, (v?.med ? Math.min(ask, v.med) : ask) - 1));
+  const s = skinportSell(h);
+  return s && !s.soft ? s.net : 0;
+}
+
+function capSoft(h, sell) {
+  if (!sell?.soft) return sell;
+  const m = h.match(/^(.*) \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/);
+  if (!m) return sell;
+  const wi = WEARS.findIndex(w => w[0] === m[2]);
+  for (let i = wi - 1; i >= 0; i--) {
+    const better = hardSell(`${m[1]} (${WEARS[i][0]})`);
+    if (better) return sell.net > better ? { ...sell, net: better, market: sell.market + ' (capped)' } : sell;
+  }
+  return sell;
+}
+
 function quote(h) {
   const c = steamCache[h], v = verified[h];
   const ask = v?.lo || c?.[0] || 0;
@@ -74,6 +94,7 @@ function quote(h) {
   if (liquid) sell = { net: netAfterFee('steam', Math.max(1, (sane ? sellBase : v.med) - 1)), market: 'steam', ask };
   if (!sell) sell = skinportSell(h);
   if (!sell && ask) sell = { net: netAfterFee('steam', Math.max(1, ask - 1)), market: 'steam thin', ask, soft: true };
+  sell = capSoft(h, sell);
   if (!sell && !ask) return null;
   return {
     buy: ask && q > 0 ? { cents: ask, market: 'steam', q } : null,
