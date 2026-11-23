@@ -282,9 +282,9 @@ export class Surf {
     if (!key) return;
     try {
       this.cs2 ||= new CS2(this.e);
-      const [arms, wpn] = await Promise.all([this.cs2.load('arms'), this.cs2.load(key)]);
+      const [arms, wpn, skin] = await Promise.all([this.cs2.load('arms'), this.cs2.load(key), this.cs2.skin(it.hash)]);
       if (this.w.bank.s.inv[this.holdIdx] !== it) return;
-      this.gun = { key, arms, wpn, clip: 'idle', t0: performance.now() / 1000 };
+      this.gun = { key, arms, wpn, skin, clip: 'idle', t0: performance.now() / 1000 };
     } catch (err) { this.gun = null; }
   }
 
@@ -325,7 +325,7 @@ export class Surf {
     e.gl.clear(e.gl.DEPTH_BUFFER_BIT);
     cs.draw(g.arms, M);
     const W = mulM(M, 0, cs.boneWorld(g.arms, 'wpn'), 0, new Float32Array(16), 0);
-    cs.draw(g.wpn, W);
+    cs.draw(g.wpn, W, g.skin);
     this.drawMag(g, W);
     e.VP = keep;
   }
@@ -334,7 +334,7 @@ export class Surf {
     const cs = this.cs2, mag = g.wpn.mag;
     if (!mag || !g.wpn.byName.has('clip')) return;
     const C = mulM(W, 0, cs.boneWorld(g.wpn, 'clip'), 0, new Float32Array(16), 0);
-    cs.draw(mag, mulM(C, 0, M4.fromQT([0.5, 0.5, 0.5, 0.5], [0, 0, 0]), 0, new Float32Array(16), 0));
+    cs.draw(mag, mulM(C, 0, M4.fromQT([0.5, 0.5, 0.5, 0.5], [0, 0, 0]), 0, new Float32Array(16), 0), g.skin);
   }
 
   drawGun3(m, av) {
@@ -347,7 +347,7 @@ export class Surf {
     const B = new Float32Array([0, -sn * k, c * k, 0, k, 0, 0, 0, 0, c * k, sn * k, 0, H[12], H[13], H[14], 1]);
     const T = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -grip[12], -grip[13], -grip[14], 1]);
     const W = M4.mul(m, mulM(B, 0, T, 0, new Float32Array(16), 0));
-    cs.draw(g.wpn, W);
+    cs.draw(g.wpn, W, g.skin);
     this.drawMag(g, W);
   }
 

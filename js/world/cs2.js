@@ -86,6 +86,17 @@ export class CS2 {
     this.light = [0.35, 0.8, 0.45]; this.amb = [0.55, 0.55, 0.58]; this.sun = [0.55, 0.53, 0.5];
   }
 
+  async skin(hash) {
+    if (!hash || !hash.includes(' | ')) return null;
+    try {
+      this.skins ||= fetch(this.base + 'skins/index.json').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+      const idx = await this.skins;
+      const n = hash.replace('★ ', '').replace('StatTrak™ ', '').replace('Souvenir ', '').replace(/ \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/, '').trim();
+      const f = idx[n];
+      return f ? await this.e.texUrl(this.base + 'skins/' + f, true, false, true) : null;
+    } catch (err) { return null; }
+  }
+
   load(key) {
     if (!this.cache[key]) this.cache[key] = this.fetch(key).catch(err => { delete this.cache[key]; throw err; });
     return this.cache[key];
@@ -179,7 +190,7 @@ export class CS2 {
     return out;
   }
 
-  draw(m, model) {
+  draw(m, model, skin) {
     const e = this.e, gl = e.gl, L = this.L;
     if (!m.groups.length) return;
     gl.useProgram(this.prog);
@@ -193,7 +204,7 @@ export class CS2 {
     at(L.aP, m.p, 3); at(L.aN, m.n, 3); at(L.aU, m.u, 2); at(L.aJ, m.j, 4); at(L.aW, m.w, 4);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.i);
     const type = m.big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, sz = m.big ? 4 : 2;
-    for (const g of m.groups) { gl.bindTexture(gl.TEXTURE_2D, g.tex); gl.drawElements(gl.TRIANGLES, g.count, type, g.start * sz); }
+    m.groups.forEach((g, i) => { gl.bindTexture(gl.TEXTURE_2D, i === 0 && skin ? skin : g.tex); gl.drawElements(gl.TRIANGLES, g.count, type, g.start * sz); });
     for (const loc of [L.aJ, L.aW]) if (loc >= 0) gl.disableVertexAttribArray(loc);
     gl.useProgram(e.prog);
   }
