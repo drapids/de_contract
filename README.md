@@ -21,9 +21,10 @@ a basement you hang out in. theres a crt in the corner that finds cs2 trade ups 
 
 1. push this to github as a **public** repo (public = unlimited free actions minutes)
 2. repo settings > pages > source: **github actions**
-3. (optional) discord alerts: in your discord channel go to edit channel > integrations > webhooks > new webhook, copy the url. then repo settings > secrets and variables > actions > new secret called `DISCORD_WEBHOOK`
-4. actions tab > enable workflows > run "scan" once by hand. after that it runs every 5 min on its own
-5. site will be at `https://drapids.github.io/de_contract/`
+3. csfloat prices: on csfloat go to your profile > developer, make an api key, then repo settings > secrets and variables > actions > new secret called `CSFLOAT_KEY`. without it knives mostly end up as "no price"
+4. (optional) discord alerts: in your discord channel go to edit channel > integrations > webhooks > new webhook, copy the url. then repo settings > secrets and variables > actions > new secret called `DISCORD_WEBHOOK`
+5. actions tab > enable workflows > run "scan" once by hand. after that it runs every 5 min on its own
+6. site will be at `https://drapids.github.io/de_contract/`
 
 ## the key (defuse screen)
 
@@ -62,8 +63,10 @@ drop mp3s into `assets/voice/` named by when they play (`dubs_1.mp3`, `fail_1.mp
 - steam only lets you pull so many prices at once so the scanner walks through the steam market a chunk at a time
 - floats arent in the free price data so it assumes the top of each wear (worst case). real floats are usually better
 - fees: steam takes ~13% (5% + 10%)
-- when steam doesnt have enough listings for something (knives a lot of the time) it uses skinport sales instead (7 day / 30 day median, then 90 day or the cheapest listing). if nothing has a price it says "no price" and that outcome gets left out of worst case + ev instead of counting as $0
-- skinport numbers are after their 8% fee
+- when steam doesnt have enough listings for something (knives a lot of the time) it uses csfloat. it takes whichever is lower out of csfloat's own price estimate and the cheapest listing, after their 2% fee
+- if csfloat doesnt have it either it falls back to skinport, but only if it actually sold a decent amount (3+ sales in a week, or 6+ in a month). no more random skinport listing prices
+- csfloat only lets you look up one skin at a time so it does ~60 per scan, starting with whatever shows up in the contracts on the site, then knives/gloves. takes a few hours after adding the key for everything to fill in
+- if nothing has a price it says "no price" and that outcome gets left out of worst case + ev instead of counting as $0
 - not financial advice, the market moves fast
 
 ## surf
