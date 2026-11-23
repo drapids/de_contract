@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { Db, wearsFor, wearSpan, hashName, normFloat, outFloat, wearIndex, netAfterFee, contractSize, TIERS, WEARS } from '../js/tradeup.js';
-import { loadSkins, steamPages, steamOverview, skinport, discord, previous } from './sources.mjs';
+import { loadSkins, steamPages, steamOverview, skinport, csfloat, discord, previous } from './sources.mjs';
 
 const OUT = process.env.OUT || 'dist/data';
 const SITE = process.env.SITE_URL || '';
@@ -11,6 +11,9 @@ const VERIFY_MAX = +(process.env.VERIFY_MAX || 40);
 const VERIFY_TTL = 6 * 3600e3;
 const MIN_SELL_LISTINGS = 3;
 const SP_TTL = 24 * 3600e3;
+const CF_TTL = 12 * 3600e3;
+const CF_KEEP = 3 * 24 * 3600e3;
+const CF_MAX = +(process.env.CSFLOAT_MAX || 60);
 const MAX_UNKNOWN = 0.4;
 const TOP = 400;
 
@@ -51,23 +54,52 @@ log('skinport', sources.skinport, spr.ok ? '' : '(failed, using last)', spr.rate
 const verified = prevState?.verified || {};
 for (const k of Object.keys(verified)) if (now - verified[k].at > VERIFY_TTL) delete verified[k];
 
+const cfCache = prevState?.csfloat || {};
+for (const k of Object.keys(cfCache)) if (now - cfCache[k][3] > CF_KEEP) delete cfCache[k];
+let cfWait = prevState?.csfloatWait || 0;
+const steamLiquid = h => {
+  const c = steamCache[h], v = verified[h], q = c?.[1] ?? 0;
+  return !!((v?.lo || c?.[0]) && (v ? v.vol >= 1 || q >= MIN_SELL_LISTINGS : q >= MIN_SELL_LISTINGS));
+};
+const cfHot = new Set();
+for (const k of ['guaranteed', 'pending', 'top']) for (const t of prevTrades?.[k] || []) for (const o of t.outs || []) cfHot.add(o[0]);
+const cfWant = [...wantHashes]
+  .filter(h => !steamLiquid(h) && !(cfCache[h] && now - cfCache[h][3] < CF_TTL))
+  .map(h => [h, (cfHot.has(h) ? 0 : 2) + (h.startsWith('★') ? 0 : 1), cfCache[h]?.[3] || 0])
+  .sort((a, b) => a[1] - b[1] || a[2] - b[2])
+  .map(x => x[0]);
+const cfr = now < cfWait ? { prices: {}, done: 0, wait: true } : await csfloat(cfWant, process.env.CSFLOAT_KEY, CF_MAX);
+Object.assign(cfCache, cfr.prices);
+if (cfr.rate) cfWait = now + 30 * 60e3;
+if (cfr.auth) cfWait = now + 6 * 3600e3;
+sources.csfloat = Object.keys(cfCache).length;
+log('csfloat', cfr.done, 'checked,', sources.csfloat, 'cached,', cfWant.length, 'still want', cfr.off ? '(no key)' : cfr.wait ? '(backing off)' : cfr.rate ? '(rate limited)' : cfr.auth ? '(bad key)' : '');
+
 function skinportSell(h) {
   const e = spCache[h];
   if (!e) return null;
-  const [m7, m30, sug, v7, v30, ask, m90, v90, qty] = e;
-  if (m7 && v7 >= 2) return { net: netAfterFee('skinport', m7), market: 'skinport' };
-  if (m30 && v30 >= 1) return { net: netAfterFee('skinport', m30), market: 'skinport' };
-  if (m90 && v90 >= 1) return { net: netAfterFee('skinport', m90), market: 'skinport 90d', soft: true };
-  if (ask && qty) return { net: netAfterFee('skinport', Math.min(ask, sug || ask)), market: 'skinport ask', soft: true };
+  const [m7, m30, , v7, v30] = e;
+  if (m7 && v7 >= 3) return { net: netAfterFee('skinport', m7), market: 'skinport' };
+  if (m30 && v30 >= 6) return { net: netAfterFee('skinport', m30), market: 'skinport 30d', soft: true };
   return null;
+}
+
+function csfloatSell(h) {
+  const e = cfCache[h];
+  if (!e) return null;
+  const [ask, ref, qty] = e;
+  const v = ref && ask ? Math.min(ref, ask) : ref || ask;
+  if (!v) return null;
+  const soft = !ref && qty < 3;
+  return { net: netAfterFee('csfloat', Math.max(1, v - 1)), market: soft ? 'csfloat thin' : 'csfloat', soft };
 }
 
 function hardSell(h) {
   const c = steamCache[h], v = verified[h];
   const ask = v?.lo || c?.[0] || 0, q = c?.[1] ?? 0;
   if (ask && (v ? v.vol >= 1 || q >= MIN_SELL_LISTINGS : q >= MIN_SELL_LISTINGS)) return netAfterFee('steam', Math.max(1, (v?.med ? Math.min(ask, v.med) : ask) - 1));
-  const s = skinportSell(h);
-  return s && !s.soft ? s.net : 0;
+  for (const s of [csfloatSell(h), skinportSell(h)]) if (s && !s.soft) return s.net;
+  return 0;
 }
 
 function capSoft(h, sell) {
@@ -92,7 +124,10 @@ function quote(h) {
   const sane = !(v?.med && ask > v.med * 2.5);
   let sell = null;
   if (liquid) sell = { net: netAfterFee('steam', Math.max(1, (sane ? sellBase : v.med) - 1)), market: 'steam', ask };
-  if (!sell) sell = skinportSell(h);
+  if (!sell) {
+    const opts = [csfloatSell(h), skinportSell(h)].filter(Boolean);
+    sell = opts.find(o => !o.soft) || opts[0] || null;
+  }
   if (!sell && ask) sell = { net: netAfterFee('steam', Math.max(1, ask - 1)), market: 'steam thin', ask, soft: true };
   sell = capSoft(h, sell);
   if (!sell && !ask) return null;
@@ -275,7 +310,7 @@ const strip = r => { const { _parts, ...o } = r; return o; };
 
 await mkdir(OUT, { recursive: true });
 await writeFile(`${OUT}/tradeups.json`, JSON.stringify({ at: now, took: Date.now() - t0, rateLimited: rateLimited || ov.rate, sources, guaranteed: guaranteed.map(strip), pending: pend.map(strip), top: top.map(strip) }));
-await writeFile(`${OUT}/state.json`, JSON.stringify({ steam: steamCache, steamAge, steamNext: sp.next, firstSeen, hollow, verified, skinport: spCache, skinportAt: spAt }));
+await writeFile(`${OUT}/state.json`, JSON.stringify({ steam: steamCache, steamAge, steamNext: sp.next, firstSeen, hollow, verified, skinport: spCache, skinportAt: spAt, csfloat: cfCache, csfloatWait: cfWait }));
 await writeFile(`${OUT}/hollow.json`, JSON.stringify({ at: now, hollow }));
 await writeFile(`${OUT}/prices.json`, JSON.stringify({ at: now, prices }));
 await writeFile(`${OUT}/skins.json`, JSON.stringify(skinsLite));

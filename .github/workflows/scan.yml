@@ -39,6 +39,7 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STEAM_PAGES: 70
           VERIFY_MAX: 40
+          CSFLOAT_KEY: ${{ secrets.CSFLOAT_KEY }}
           SITE_KEY: ${{ secrets.SITE_KEY }}
         run: node scanner/scan.mjs
       - name: lock
