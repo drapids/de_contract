@@ -17,6 +17,16 @@ const S = 0.025;
 const G = 800, ACC = 5, AIRACC = 150, FRIC = 4, STOP = 75, MAXS = 250, JUMP = 301.993, STEP = 18, MAXV = 3500;
 const MINS = [-16, -16, 0], MAXS_B = [16, 16, 72], EPS = 0.03125;
 const TICK = 1 / 100;
+const SKIES = {
+  blacksky: { top: [0.01, 0.01, 0.03], hor: [0.07, 0.07, 0.12], stars: 1, sun: [0.55, 0.55, 0.62] },
+  space_18: { top: [0.01, 0.005, 0.03], hor: [0.1, 0.06, 0.2], stars: 1, sun: [0.6, 0.55, 0.7] },
+  sky_starfield_nm: { top: [0.0, 0.01, 0.03], hor: [0.05, 0.08, 0.16], stars: 1, sun: [0.55, 0.6, 0.7] },
+  sky_day01_01: { top: [0.22, 0.42, 0.78], hor: [0.72, 0.82, 0.93], stars: 0, sun: [0.75, 0.7, 0.6] },
+  armagedon: { top: [0.2, 0.04, 0.03], hor: [0.8, 0.38, 0.18], stars: 0, sun: [0.8, 0.5, 0.35] },
+  sky_demise_03: { top: [0.1, 0.01, 0.02], hor: [0.5, 0.12, 0.08], stars: 1, sun: [0.75, 0.4, 0.35] },
+  mpa104: { top: [0.16, 0.2, 0.42], hor: [0.9, 0.62, 0.45], stars: 0, sun: [0.8, 0.65, 0.5] }
+};
+const SKY0 = { top: [0.12, 0.17, 0.32], hor: [0.55, 0.6, 0.7], stars: 0, sun: [0.7, 0.68, 0.6] };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const D = Math.PI / 180;
@@ -210,7 +220,8 @@ export class Surf {
       const mesh = e.mesh({ P, N, U, I });
       const groups = [];
       for (const g of meta.groups) groups.push({ start: g.start, count: g.count, tex: await e.texUrl(base + g.tex, true, false, true), tint: [1, 1, 1, 1] });
-      this.map = { meta, obj: { mesh, groups }, col: new Col(col), id: m.id, name: m.name };
+      const sky = SKIES[meta.sky] || SKY0;
+      this.map = { meta, obj: { mesh, groups }, col: new Col(col), id: m.id, name: m.name, sky, dome: this.dome(sky) };
       const dests = new Set();
       for (const t of meta.triggers) if (t.dest) dests.add(t.dest.o.join(','));
       this.map.total = dests.size;
@@ -240,7 +251,31 @@ export class Surf {
     this.msg(m.name + ' · good luck', 2500);
   }
 
+  dome(sky) {
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 512;
+    const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 512);
+    const col = v => `rgb(${v.map(a => Math.round(a * 255)).join(',')})`;
+    g.addColorStop(0, col(sky.top)); g.addColorStop(0.5, col(sky.hor)); g.addColorStop(1, col(sky.hor.map(v => v * 0.55)));
+    x.fillStyle = g; x.fillRect(0, 0, 1024, 512);
+    if (sky.stars) {
+      let r = 7;
+      const R = () => (r = (r * 16807) % 2147483647) / 2147483647;
+      for (let i = 0; i < 1400; i++) { const yy = R() * 250, a = R(); x.fillStyle = `rgba(255,255,255,${(0.3 + a * 0.7) * (1 - yy / 260)})`; x.fillRect(R() * 1024, yy, a > 0.93 ? 2 : 1, a > 0.93 ? 2 : 1); }
+    }
+    const P = [], N = [], U = [], I = [], W = 32, H = 16;
+    for (let j = 0; j <= H; j++) for (let i = 0; i <= W; i++) {
+      const th = j / H * Math.PI, ph = i / W * Math.PI * 2;
+      const v = [Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)];
+      P.push(...v); N.push(-v[0], -v[1], -v[2]); U.push(i / W, j / H);
+    }
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const a = j * (W + 1) + i, b = a + W + 1; I.push(a, a + 1, b, b, a + 1, b + 1); }
+    const e = this.e;
+    return { mesh: e.mesh({ P: new Float32Array(P), N: new Float32Array(N), U: new Float32Array(U), I: new Uint32Array(I) }), groups: [{ start: 0, count: I.length, tex: e.texCanvas(c, null, false, false, true), tint: [1, 1, 1, 1] }] };
+  }
+
   exit() {
+    this.e.sun = null;
     document.exitPointerLock?.();
     this.w.surfOn = null;
     this.e.setMode(false);
@@ -618,13 +653,16 @@ export class Surf {
       eye = ours([tgt[0] + (end[0] - tgt[0]) * k, tgt[1] + (end[1] - tgt[1]) * k, tgt[2] + (end[2] - tgt[2]) * k]);
     }
     const asp = e.canvas.width / e.canvas.height;
-    const VP = M4.mul(M4.persp(vfov(set.fov, asp), asp, 0.05, 900), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
-    e.amb = [0.62, 0.62, 0.66];
-    e.fog = [0.05, 0.06, 0.09];
-    e.fogR = [260, 880];
-    const bc = m.meta.bounds;
-    e.lights = [{ pos: ours([(bc[0][0] + bc[1][0]) / 2 + 9000, (bc[0][1] + bc[1][1]) / 2 + 6000, bc[1][2] + 20000]), color: [0.7, 0.68, 0.6], r: 2400, k: 1 }];
+    const VP = M4.mul(M4.persp(vfov(set.fov, asp), asp, 0.05, 2600), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
+    const sky = m.sky;
+    e.amb = [0.5, 0.5, 0.54];
+    e.fog = sky.hor;
+    e.fogR = [900, 2400];
+    e.lights = [];
+    e.sun = { d: [0.42, 0.82, 0.39], c: sky.sun };
     e.begin(VP, e.fog);
+    e.draw(m.dome, M4.fromQT([0, 0, 0, 1], eye, 60), { unlit: 1 });
+    e.gl.clear(e.gl.DEPTH_BUFFER_BIT);
     e.draw(m.obj, M4.id());
     this.drawMe(dt, now, ours, sp);
   }
