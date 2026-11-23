@@ -165,6 +165,10 @@ export class Loot {
     if (!it) return;
     const v = this.value(it);
     this.bank.s.inv.splice(i, 1);
+    const sf = this.w.surf, h = this.bank.s.hold ?? -1;
+    if (h === i) { this.bank.s.hold = -1; if (sf) { sf.held = null; sf.gun = null; sf.card = null; sf.holdIdx = -1; } }
+    else if (h > i) { this.bank.s.hold = h - 1; if (sf && sf.holdIdx > i) sf.holdIdx--; }
+    if (sf && sf.lastIdx >= i) sf.lastIdx = sf.lastIdx === i ? -1 : sf.lastIdx - 1;
     if (cur === 'rub') this.bank.add(Math.round(v * 0.7));
     else this.bank.add(0, Math.max(1, Math.round(v / 9)));
   }
@@ -175,7 +179,8 @@ export class Loot {
     const b = this.$('.lt-body');
     const tot = inv.reduce((a, it) => a + this.value(it), 0);
     b.innerHTML = `<p class="dim">${inv.length} items · worth about ${tot.toLocaleString('en-US')} ₽. ₽ button = sell to the vending machine for 70%, scrap button = sell to hazmat for scrap.</p><div class="lt-grid">` +
-      (inv.length ? inv.map((it, i) => `<div class="lt-item" style="--c:${TIER_COLORS[it.r]}">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : '<div class="lt-noimg">?</div>'}<b>${esc(short(it.hash))}</b><span>${it.f.toFixed(4)} · ${this.value(it)} ₽</span><div class="row"><button class="btn" data-r="${i}">₽</button><button class="btn" data-s="${i}">scrap</button></div></div>`).reverse().join('') : '<p class="dim">empty. the vending machine in the basement sells cases</p>') + '</div>';
+      (inv.length ? inv.map((it, i) => `<div class="lt-item" style="--c:${TIER_COLORS[it.r]}">${it.img ? `<img src="${esc(it.img)}" alt="" loading="lazy">` : '<div class="lt-noimg">?</div>'}<b>${esc(short(it.hash))}</b><span>${it.f.toFixed(4)} · ${this.value(it)} ₽</span><div class="row"><button class="btn${this.bank.s.hold === i ? ' on' : ''}" data-h="${i}">${this.bank.s.hold === i ? 'holding' : 'hold'}</button><button class="btn" data-r="${i}">₽</button><button class="btn" data-s="${i}">scrap</button></div></div>`).reverse().join('') : '<p class="dim">empty. the vending machine in the basement sells cases</p>') + '</div>';
+    b.querySelectorAll('[data-h]').forEach(el => el.onclick = () => { const i = +el.dataset.h; this.w.surf.equip(this.bank.s.hold === i ? -1 : i); this.inv(); });
     b.querySelectorAll('[data-r]').forEach(el => el.onclick = () => { this.sell(+el.dataset.r, 'rub'); this.inv(); });
     b.querySelectorAll('[data-s]').forEach(el => el.onclick = () => { this.sell(+el.dataset.s, 'scrap'); this.inv(); });
   }

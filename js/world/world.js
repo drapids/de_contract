@@ -79,7 +79,8 @@ export class World {
       if (k === 'e' && !e.repeat) this.use();
       if ((k === 'v' || k === 'м') && !e.repeat && !this.surfOn && !this.busy) { this.fp = !this.fp; this.slock = false; if (this.fp) lockMouse(this.canvas); else document.exitPointerLock?.(); }
       if ((k === 'q' || k === 'й') && !e.repeat && !this.surfOn && !this.busy) { this.slock = !this.slock; this.fp = false; if (this.slock) lockMouse(this.canvas); else document.exitPointerLock?.(); }
-      if ((k === 'f' || k === 'а') && !e.repeat && !this.busy && !this.kickS && !this.seated) this.dropkick();
+      if ((k === 'f' || k === 'а') && !e.repeat && !this.busy && this.fp && this.surf.gun) this.surf.inspect();
+      else if ((k === 'f' || k === 'а') && !e.repeat && !this.busy && !this.kickS && !this.seated) this.dropkick();
       this.$('.w-hint').classList.add('gone');
     });
     addEventListener('keyup', e => { this.keys.delete(e.key.toLowerCase()); if (!e.shiftKey) this.keys.delete('shift'); });
@@ -376,9 +377,20 @@ export class World {
   }
 
   drawArms(now, dt) {
-    if (!this.arms) { this.loadArms(); return; }
     const { eye, f } = this.fpEye, y = this.fpEye.yaw;
     const r = [-Math.cos(y), 0, Math.sin(y)];
+    const sf = this.surf, it = sf.heldNow();
+    if (it && sf.gun) {
+      const dy = y - (this.vmYaw ?? y), dp = this.fpEye.pitch - (this.vmPitch ?? this.fpEye.pitch);
+      this.vmYaw = y; this.vmPitch = this.fpEye.pitch;
+      const kk = Math.min(1, dt * 10);
+      this.vmX = (this.vmX || 0) + (Math.max(-0.05, Math.min(0.05, -dy * 0.23)) - (this.vmX || 0)) * kk;
+      this.vmY = (this.vmY || 0) + (Math.max(-0.04, Math.min(0.04, dp * 0.23)) - (this.vmY || 0)) * kk;
+      const hs = Math.hypot(...(this.hv || [0, 0])), run = this.av.pos[1] > 0 ? 0 : Math.min(1, hs / 3.4);
+      sf.vm(now, eye, f, r, 1, run, 0, this.vmX, this.vmY);
+      return;
+    }
+    if (!this.arms) { this.loadArms(); return; }
     const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
     const hs = Math.hypot(...(this.hv || [0, 0]));
     const run = this.av.pos[1] > 0 ? 0 : Math.min(1, hs / 3.4);
