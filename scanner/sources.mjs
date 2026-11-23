@@ -9,8 +9,12 @@ const RARITY = {
 
 async function getJson(url, opts = {}) {
   if (process.env.FIXTURES) {
-    const key = url.includes('priceoverview') ? 'overview' : url.includes('steamcommunity') ? 'steam' : url.includes('crates.json') ? 'crates' : url.includes('CSGO-API') ? 'skins' : url.includes('sales/history') ? 'sp_sales' : url.includes('skinport') ? 'sp_items' : 'other';
+    const key = url.includes('csfloat.com') ? 'csfloat' : url.includes('priceoverview') ? 'overview' : url.includes('steamcommunity') ? 'steam' : url.includes('crates.json') ? 'crates' : url.includes('CSGO-API') ? 'skins' : url.includes('sales/history') ? 'sp_sales' : url.includes('skinport') ? 'sp_items' : 'other';
     const data = JSON.parse(await readFile(`${process.env.FIXTURES}/${key}.json`, 'utf8'));
+    if (key === 'csfloat') {
+      const name = decodeURIComponent(new URL(url).searchParams.get('market_hash_name'));
+      return data[name] || [];
+    }
     if (key === 'overview') {
       const name = decodeURIComponent(url.split('market_hash_name=')[1]);
       return data[name] || { success: false };
@@ -19,6 +23,7 @@ async function getJson(url, opts = {}) {
   }
   const r = await fetch(url, { headers: { ...UA, ...(opts.headers || {}) } });
   if (r.status === 429) { const e = new Error('rate limited'); e.rate = true; throw e; }
+  if (r.status === 401 || r.status === 403) { const e = new Error(`${url} -> ${r.status}`); e.auth = true; throw e; }
   if (!r.ok) throw new Error(`${url} -> ${r.status}`);
   return r.json();
 }
@@ -137,6 +142,32 @@ export async function skinport(want) {
     if (e[0] || e[1] || e[6] || (e[5] && e[8])) out[h] = e;
   }
   return { prices: out, rate, ok: Array.isArray(items) || Array.isArray(sales) };
+}
+
+export async function csfloat(hashes, key, max, delay = 1200) {
+  const out = {};
+  let rate = false, auth = false, done = 0;
+  if (!key && !process.env.FIXTURES) return { prices: out, rate, auth: false, done, off: true };
+  for (const h of hashes) {
+    if (done >= max) break;
+    const u = `https://csfloat.com/api/v1/listings?market_hash_name=${encodeURIComponent(h)}&sort_by=lowest_price&type=buy_now&limit=10`;
+    let res;
+    try { res = await getJson(u, { headers: { Authorization: key || '' } }); }
+    catch (e) {
+      if (e.rate) { rate = true; break; }
+      if (e.auth) { auth = true; break; }
+      done++;
+      continue;
+    }
+    done++;
+    const rows = (Array.isArray(res) ? res : res?.data || []).filter(l => l && l.price > 0 && (!l.item?.market_hash_name || l.item.market_hash_name === h));
+    const prices = rows.map(l => l.price).sort((a, b) => a - b);
+    const refs = rows.map(l => l.reference?.predicted_price || l.reference?.base_price || 0).filter(Boolean).sort((a, b) => a - b);
+    const qty = Math.max(rows.length, ...rows.map(l => l.reference?.quantity || 0));
+    out[h] = [prices[0] || 0, refs.length ? refs[refs.length >> 1] : 0, qty, Date.now()];
+    if (!process.env.FIXTURES) await sleep(delay);
+  }
+  return { prices: out, rate, auth, done };
 }
 
 export async function discord(hook, payload) {
