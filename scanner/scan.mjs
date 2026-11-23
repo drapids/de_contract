@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { Db, wearsFor, wearSpan, hashName, normFloat, outFloat, wearIndex, netAfterFee, contractSize, TIERS, WEARS } from '../js/tradeup.js';
-import { loadSkins, steamPages, steamOverview, discord, previous } from './sources.mjs';
+import { loadSkins, steamPages, steamOverview, skinport, discord, previous } from './sources.mjs';
 
 const OUT = process.env.OUT || 'dist/data';
 const SITE = process.env.SITE_URL || '';
@@ -10,6 +10,8 @@ const STEAM_TTL = 36 * 3600e3;
 const VERIFY_MAX = +(process.env.VERIFY_MAX || 40);
 const VERIFY_TTL = 6 * 3600e3;
 const MIN_SELL_LISTINGS = 3;
+const SP_TTL = 24 * 3600e3;
+const MAX_UNKNOWN = 0.4;
 const TOP = 400;
 
 const t0 = Date.now();
@@ -37,22 +39,45 @@ const rateLimited = sp.rate;
 sources.market = 'steam';
 log('steam', sources.steamFresh, 'fresh,', sources.steam, 'cached', rateLimited ? '(rate limited)' : '');
 
+const wantHashes = new Set();
+for (const s of db.skins) for (const wi of wearsFor(s)) for (const st of s.st ? [false, true] : [false]) wantHashes.add(hashName(s, wi, st));
+let spCache = prevState?.skinport || {}, spAt = prevState?.skinportAt || 0;
+const spr = await skinport(wantHashes);
+if (spr.ok && Object.keys(spr.prices).length) { spCache = spr.prices; spAt = now; }
+else if (now - spAt > SP_TTL) { spCache = {}; spAt = 0; }
+sources.skinport = Object.keys(spCache).length;
+log('skinport', sources.skinport, spr.ok ? '' : '(failed, using last)', spr.rate ? '(rate limited)' : '');
+
 const verified = prevState?.verified || {};
 for (const k of Object.keys(verified)) if (now - verified[k].at > VERIFY_TTL) delete verified[k];
 
+function skinportSell(h) {
+  const e = spCache[h];
+  if (!e) return null;
+  const [m7, m30, sug, v7, v30, ask, m90, v90, qty] = e;
+  if (m7 && v7 >= 2) return { net: netAfterFee('skinport', m7), market: 'skinport' };
+  if (m30 && v30 >= 1) return { net: netAfterFee('skinport', m30), market: 'skinport' };
+  if (m90 && v90 >= 1) return { net: netAfterFee('skinport', m90), market: 'skinport 90d', soft: true };
+  if (ask && qty) return { net: netAfterFee('skinport', Math.min(ask, sug || ask)), market: 'skinport ask', soft: true };
+  return null;
+}
+
 function quote(h) {
   const c = steamCache[h], v = verified[h];
-  if (!c && !v) return null;
   const ask = v?.lo || c?.[0] || 0;
   const q = c?.[1] ?? 0;
-  if (!ask) return null;
   let sellBase = ask;
   if (v?.med) sellBase = Math.min(ask, v.med);
-  const liquid = v ? v.vol >= 1 || q >= MIN_SELL_LISTINGS : q >= MIN_SELL_LISTINGS;
+  const liquid = ask && (v ? v.vol >= 1 || q >= MIN_SELL_LISTINGS : q >= MIN_SELL_LISTINGS);
   const sane = !(v?.med && ask > v.med * 2.5);
+  let sell = null;
+  if (liquid) sell = { net: netAfterFee('steam', Math.max(1, (sane ? sellBase : v.med) - 1)), market: 'steam', ask };
+  if (!sell) sell = skinportSell(h);
+  if (!sell && ask) sell = { net: netAfterFee('steam', Math.max(1, ask - 1)), market: 'steam thin', ask, soft: true };
+  if (!sell && !ask) return null;
   return {
-    buy: q > 0 ? { cents: ask, market: 'steam', q } : null,
-    sell: liquid ? { net: netAfterFee('steam', Math.max(1, (sane ? sellBase : v.med) - 1)), market: 'steam', ask } : null,
+    buy: ask && q > 0 ? { cents: ask, market: 'steam', q } : null,
+    sell,
     checked: !!v
   };
 }
@@ -94,20 +119,26 @@ function score(parts, n, st, tier) {
     e.p += k / n / c.pool.length;
     probs.set(o.n, e);
   }
-  let ev = 0, win = 0, worst = Infinity, best = 0, unknown = 0;
+  let ev = 0, win = 0, worst = Infinity, best = 0, unknown = 0, soft = false;
   const outs = [];
   for (const { skin, p } of probs.values()) {
     const f = skin.vanilla ? 0 : outFloat(nHi, skin);
     const fLo = skin.vanilla ? 0 : outFloat(nLo, skin);
     const wi = wearIndex(f);
     const h = hashName(skin, wi, st);
-    const s = P.sell(h) || (unknown += p, { net: 0, market: '?' });
-    ev += p * s.net;
-    if (s.net > cost) win += p;
-    worst = Math.min(worst, s.net);
-    best = Math.max(best, s.net);
-    outs.push([h, +p.toFixed(4), +f.toFixed(4), s.net, s.market, skin.img, +fLo.toFixed(4), wearIndex(fLo) !== wi ? hashName(skin, wearIndex(fLo), st) : 0]);
+    const s = P.sell(h);
+    if (s) {
+      ev += p * s.net;
+      if (s.net > cost) win += p;
+      worst = Math.min(worst, s.net);
+      best = Math.max(best, s.net);
+      if (s.soft) soft = true;
+    } else unknown += p;
+    outs.push([h, +p.toFixed(4), +f.toFixed(4), s ? s.net : null, s ? s.market : '', skin.img, +fLo.toFixed(4), wearIndex(fLo) !== wi ? hashName(skin, wearIndex(fLo), st) : 0]);
   }
+  if (unknown > MAX_UNKNOWN) return null;
+  if (!isFinite(worst)) worst = 0;
+  if (unknown) ev /= 1 - unknown;
   outs.sort((a, b) => b[1] - a[1]);
   const ids = parts.map(([c, k]) => `${k}x${c.hash}`).sort();
   return {
@@ -115,9 +146,10 @@ function score(parts, n, st, tier) {
     st, tier, n,
     in: parts.map(([c, k]) => [c.hash, k, c.cents, c.market, c.q, c.skin.img, c.skin.min, c.skin.max, c.wi]),
     cost, ev: Math.round(ev), roi: +((ev - cost) / cost).toFixed(4), win: +win.toFixed(4), worst, best,
-    guaranteed: worst > cost && !unknown && !parts.some(([c, k]) => c.q < k),
+    guaranteed: worst > cost && !unknown && !soft && !parts.some(([c, k]) => c.q < k),
     thin: parts.some(([c, k]) => c.q < k),
     unknown: +unknown.toFixed(4),
+    soft,
     outs,
     _parts: parts
   };
@@ -214,15 +246,15 @@ for (const g of fresh.slice(0, 5)) {
 
 const skinsLite = { skins: meta.skins, collections: meta.collections, cases: meta.cases || {} };
 const prices = {};
-for (const h of new Set([...Object.keys(steamCache), ...Object.keys(verified)])) {
+for (const h of new Set([...Object.keys(steamCache), ...Object.keys(verified), ...Object.keys(spCache)])) {
   const v = P.get(h);
-  if (v) prices[h] = [v.buy?.cents || 0, 'steam', v.buy?.q || 0, v.sell?.net || 0, 'steam', v.checked ? 1 : 0];
+  if (v) prices[h] = [v.buy?.cents || 0, 'steam', v.buy?.q || 0, v.sell?.net || 0, v.sell?.market || '', v.checked ? 1 : 0];
 }
 const strip = r => { const { _parts, ...o } = r; return o; };
 
 await mkdir(OUT, { recursive: true });
 await writeFile(`${OUT}/tradeups.json`, JSON.stringify({ at: now, took: Date.now() - t0, rateLimited: rateLimited || ov.rate, sources, guaranteed: guaranteed.map(strip), pending: pend.map(strip), top: top.map(strip) }));
-await writeFile(`${OUT}/state.json`, JSON.stringify({ steam: steamCache, steamAge, steamNext: sp.next, firstSeen, hollow, verified }));
+await writeFile(`${OUT}/state.json`, JSON.stringify({ steam: steamCache, steamAge, steamNext: sp.next, firstSeen, hollow, verified, skinport: spCache, skinportAt: spAt }));
 await writeFile(`${OUT}/hollow.json`, JSON.stringify({ at: now, hollow }));
 await writeFile(`${OUT}/prices.json`, JSON.stringify({ at: now, prices }));
 await writeFile(`${OUT}/skins.json`, JSON.stringify(skinsLite));

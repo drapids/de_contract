@@ -9,7 +9,7 @@ const RARITY = {
 
 async function getJson(url, opts = {}) {
   if (process.env.FIXTURES) {
-    const key = url.includes('priceoverview') ? 'overview' : url.includes('steamcommunity') ? 'steam' : url.includes('crates.json') ? 'crates' : url.includes('CSGO-API') ? 'skins' : 'other';
+    const key = url.includes('priceoverview') ? 'overview' : url.includes('steamcommunity') ? 'steam' : url.includes('crates.json') ? 'crates' : url.includes('CSGO-API') ? 'skins' : url.includes('sales/history') ? 'sp_sales' : url.includes('skinport') ? 'sp_items' : 'other';
     const data = JSON.parse(await readFile(`${process.env.FIXTURES}/${key}.json`, 'utf8'));
     if (key === 'overview') {
       const name = decodeURIComponent(url.split('market_hash_name=')[1]);
@@ -93,6 +93,50 @@ export async function steamPages(cursor, pages, delay = 3500) {
     await sleep(delay * (fails ? 2 : 1));
   }
   return { prices: out, next: { seg, at, totals }, total: Object.values(totals).reduce((a, b) => a + b, 0), rate, wrapped };
+}
+
+const PHASE = /^Phase \d$/;
+const lowest = vals => { const v = vals.filter(x => x > 0); return v.length ? Math.min(...v) : 0; };
+
+export async function skinport(want) {
+  const base = 'https://api.skinport.com/v1';
+  const hdr = { headers: { 'Accept-Encoding': 'br' } };
+  const [items, sales] = await Promise.all([
+    getJson(`${base}/items?app_id=730&currency=USD&tradable=0`, hdr).catch(e => ({ err: e })),
+    getJson(`${base}/sales/history?app_id=730&currency=USD`, hdr).catch(e => ({ err: e }))
+  ]);
+  const rate = !!(items?.err?.rate || sales?.err?.rate);
+  const group = new Map();
+  const add = (h, v, kind, row) => {
+    if (want && !want.has(h)) return;
+    if (!group.has(h)) group.set(h, []);
+    group.get(h).push({ v, kind, row });
+  };
+  if (Array.isArray(items)) for (const r of items) add(r.market_hash_name, r.version, 'i', r);
+  if (Array.isArray(sales)) for (const r of sales) add(r.market_hash_name, r.version, 's', r);
+  const out = {};
+  const c = x => x ? Math.round(x * 100) : 0;
+  for (const [h, rows] of group) {
+    const plain = rows.filter(r => !r.v), phases = rows.filter(r => r.v && PHASE.test(r.v));
+    const use = plain.length ? plain : phases;
+    if (!use.length) continue;
+    const ss = use.filter(r => r.kind === 's').map(r => r.row), ii = use.filter(r => r.kind === 'i').map(r => r.row);
+    const one = phases.length && !plain.length;
+    const vol = k => one ? Math.min(...ss.map(r => r[k]?.volume || 0)) : ss.reduce((a, r) => a + (r[k]?.volume || 0), 0);
+    const e = [
+      lowest(ss.map(r => c(r.last_7_days?.median))),
+      lowest(ss.map(r => c(r.last_30_days?.median))),
+      lowest(ii.map(r => c(r.suggested_price))),
+      ss.length ? vol('last_7_days') : 0,
+      ss.length ? vol('last_30_days') : 0,
+      lowest(ii.map(r => c(r.min_price))),
+      lowest(ss.map(r => c(r.last_90_days?.median))),
+      ss.length ? vol('last_90_days') : 0,
+      ii.reduce((a, r) => a + (r.quantity || 0), 0)
+    ];
+    if (e[0] || e[1] || e[6] || (e[5] && e[8])) out[h] = e;
+  }
+  return { prices: out, rate, ok: Array.isArray(items) || Array.isArray(sales) };
 }
 
 export async function discord(hook, payload) {
