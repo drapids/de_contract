@@ -31,7 +31,7 @@ jobs:
       - name: build site
         run: |
           mkdir -p dist
-          cp -r index.html css js assets dist/
+          cp -r index.html css js assets solelytradeup dist/
       - name: scan
         env:
           OUT: dist/data
