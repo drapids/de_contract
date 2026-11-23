@@ -16,8 +16,12 @@ void main() {
 }`;
 
 const FS = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
-uniform sampler2D uTex; uniform vec4 uTint; uniform float uUnlit;
+#endif
+uniform sampler2D uTex; uniform vec4 uTint; uniform float uUnlit; uniform float uRetro;
 uniform vec3 uAmb; uniform vec3 uLP[6]; uniform vec3 uLC[6]; uniform float uLR[6];
 uniform vec3 uFog; uniform vec2 uFogR; uniform float uEmit;
 varying vec3 vN; varying vec2 vU; varying vec3 vW; varying float vD;
@@ -35,8 +39,10 @@ void main() {
   }
   l = mix(l, vec3(1.0), uUnlit);
   vec3 c = t.rgb * l + t.rgb * uEmit;
-  c += bayer(gl_FragCoord.xy) * 0.035;
-  c = floor(c * 24.0) / 24.0;
+  if (uRetro > 0.5) {
+    c += bayer(gl_FragCoord.xy) * 0.035;
+    c = floor(c * 24.0) / 24.0;
+  }
   float f = clamp((vD - uFogR.x) / (uFogR.y - uFogR.x), 0.0, 1.0);
   gl_FragColor = vec4(mix(c, uFog, f), t.a);
 }`;
@@ -45,15 +51,20 @@ export class Engine {
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
     this.scale = opts.pixel || 3;
-    const gl = this.gl = canvas.getContext('webgl', { antialias: false, alpha: false });
+    this.retro = true;
+    this.msaa = 0;
+    const ctx = { antialias: false, alpha: false, powerPreference: 'high-performance' };
+    const gl = this.gl = canvas.getContext('webgl2', ctx) || canvas.getContext('webgl', ctx);
+    this.gl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
     gl.getExtension('OES_element_index_uint');
+    this.aniso = gl.getExtension('EXT_texture_filter_anisotropic') || gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
     const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(o); return o; };
     const p = this.prog = gl.createProgram();
     gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(p);
     gl.useProgram(p);
     this.loc = {};
     for (const n of ['aP', 'aN', 'aU', 'aB', 'aW']) this.loc[n] = gl.getAttribLocation(p, n);
-    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uSkinned', 'uTex', 'uTint', 'uUnlit', 'uAmb', 'uLP', 'uLC', 'uLR', 'uFog', 'uFogR', 'uEmit']) this.loc[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uSkinned', 'uTex', 'uTint', 'uUnlit', 'uAmb', 'uLP', 'uLC', 'uLR', 'uFog', 'uFogR', 'uEmit', 'uRetro']) this.loc[n] = gl.getUniformLocation(p, n);
     this.white = this.texCanvas(Object.assign(document.createElement('canvas'), { width: 2, height: 2 }), '#fff');
     this.props = {};
     this.texCache = {};
@@ -69,8 +80,57 @@ export class Engine {
 
   resize() {
     const r = this.canvas.getBoundingClientRect();
-    this.canvas.width = Math.max(1, Math.round(r.width / this.scale));
-    this.canvas.height = Math.max(1, Math.round(r.height / this.scale));
+    const w = Math.max(1, Math.round(r.width / this.scale)), h = Math.max(1, Math.round(r.height / this.scale));
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
+    this.fitMsaa();
+  }
+
+  setMode(smooth) {
+    smooth = !!smooth;
+    if (smooth === !this.retro) return;
+    if (smooth) { this.pixel0 = this.scale; this.scale = 1 / (devicePixelRatio || 1); }
+    else this.scale = this.pixel0 || 3;
+    this.retro = !smooth;
+    this.msaa = smooth && this.gl2 ? Math.min(4, this.gl.getParameter(this.gl.MAX_SAMPLES) || 0) : 0;
+    this.canvas.classList.toggle('smooth', smooth);
+    this.resize();
+  }
+
+  fitMsaa() {
+    const gl = this.gl, c = this.canvas;
+    if (!this.msaa) {
+      if (this.fb) { gl.deleteFramebuffer(this.fb.f); gl.deleteRenderbuffer(this.fb.c); gl.deleteRenderbuffer(this.fb.d); this.fb = null; }
+      return;
+    }
+    if (this.fb && this.fb.w === c.width && this.fb.h === c.height && this.fb.s === this.msaa && this.fb.k === this.fbFmt) return;
+    if (this.fb) { gl.deleteFramebuffer(this.fb.f); gl.deleteRenderbuffer(this.fb.c); gl.deleteRenderbuffer(this.fb.d); }
+    const f = gl.createFramebuffer(), col = gl.createRenderbuffer(), dep = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, col);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.msaa, this.fbFmt ? gl.RGBA8 : gl.RGB8, c.width, c.height);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, dep);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, this.msaa, gl.DEPTH_COMPONENT24, c.width, c.height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, col);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, dep);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.fb = { f, c: col, d: dep, w: c.width, h: c.height, s: this.msaa, k: this.fbFmt };
+    if (!ok) { this.msaa = 0; this.fitMsaa(); }
+  }
+
+  end() {
+    if (!this.fb) return;
+    const gl = this.gl, c = this.canvas;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.fb.f);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    if (!this.fbOk) gl.getError();
+    gl.blitFramebuffer(0, 0, c.width, c.height, 0, 0, c.width, c.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (this.fbOk) return;
+    if (gl.getError() === gl.NO_ERROR) { this.fbOk = true; return; }
+    if (!this.fbFmt) this.fbFmt = 1; else this.msaa = 0;
+    this.fitMsaa();
   }
 
   buf(data, T = Float32Array, k = this.gl.ARRAY_BUFFER) {
@@ -84,17 +144,20 @@ export class Engine {
     return { p: this.buf(g.P), n: this.buf(g.N), u: this.buf(g.U), b: extra.B ? this.buf(extra.B) : null, w: extra.W ? this.buf(extra.W) : null, i: this.buf(g.I, big ? Uint32Array : Uint16Array, this.gl.ELEMENT_ARRAY_BUFFER), count: g.I.length, big };
   }
 
-  texCanvas(c, fill, repeat, flip = false) {
+  texCanvas(c, fill, repeat, flip = false, smooth = false) {
     const gl = this.gl;
     if (fill) { const x = c.getContext('2d'); x.fillStyle = fill; x.fillRect(0, 0, c.width, c.height); }
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flip);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     const pot = (c.width & (c.width - 1)) === 0 && (c.height & (c.height - 1)) === 0;
-    const wrap = repeat && pot ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+    const mips = smooth && (pot || this.gl2);
+    if (mips) gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mips ? gl.LINEAR_MIPMAP_LINEAR : smooth ? gl.LINEAR : gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, smooth ? gl.LINEAR : gl.NEAREST);
+    if (smooth && this.aniso) gl.texParameterf(gl.TEXTURE_2D, this.aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(this.aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+    const wrap = repeat && (pot || this.gl2) ? gl.REPEAT : gl.CLAMP_TO_EDGE;
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
     return t;
@@ -105,13 +168,13 @@ export class Engine {
     return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; });
   }
 
-  async texUrl(url, repeat = true, flip = false) {
-    const key = url + (flip ? '#f' : '');
+  async texUrl(url, repeat = true, flip = false, smooth = false) {
+    const key = url + (flip ? '#f' : '') + (smooth ? '#s' : '');
     if (this.texCache[key]) return this.texCache[key];
     const im = await this.img(url);
     const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
     c.getContext('2d').drawImage(im, 0, 0);
-    return (this.texCache[key] = this.texCanvas(c, null, repeat, flip));
+    return (this.texCache[key] = this.texCanvas(c, null, repeat, flip, smooth));
   }
 
   async json(url) {
@@ -144,13 +207,15 @@ export class Engine {
 
   begin(VP, clear = this.fog) {
     const gl = this.gl, L = this.loc, c = this.canvas;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb ? this.fb.f : null);
     gl.viewport(0, 0, c.width, c.height);
     gl.clearColor(clear[0], clear[1], clear[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST);
     gl.useProgram(this.prog);
     gl.uniformMatrix4fv(L.uVP, false, VP);
-    gl.uniform1f(L.uSnap, Math.min(c.width, c.height) * 0.5);
+    gl.uniform1f(L.uSnap, this.retro ? Math.min(c.width, c.height) * 0.5 : 0);
+    gl.uniform1f(L.uRetro, this.retro ? 1 : 0);
     gl.uniform3fv(L.uAmb, this.amb);
     gl.uniform3fv(L.uFog, this.fog);
     gl.uniform2fv(L.uFogR, this.fogR);

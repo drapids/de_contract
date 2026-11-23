@@ -717,7 +717,7 @@ export class World {
     const now = ms / 1000, dt = Math.min(0.05, now - (this.last / 1000 || now));
     this.last = ms;
     if (!this.scene) return;
-    if (this.surfOn) { this.surfOn.frame(dt, now); this.interact(); return; }
+    if (this.surfOn) { this.surfOn.frame(dt, now); this.e.end(); this.interact(); return; }
     this.step(dt, now);
     this.chickenStep(dt, now);
     this.events.update(dt, now);

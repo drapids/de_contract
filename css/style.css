@@ -264,6 +264,7 @@ body.defusing .bar, body.defusing .layout, body.defusing .foot { filter: blur(3p
 .world[hidden] { display: none; }
 .world-gl { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; display: block; cursor: grab; touch-action: none; }
 .world-gl:active { cursor: grabbing; }
+.world-gl.smooth { image-rendering: auto; }
 .world-ui { position: absolute; inset: 0; pointer-events: none; font: 12px/1.3 var(--font); color: #e6e8de; }
 .w-where { position: absolute; left: 12px; top: 10px; font: bold 16px Verdana, sans-serif; letter-spacing: 1px; text-shadow: 2px 2px 0 #000; text-transform: lowercase; }
 .w-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(20,24,18,.75); border: 1px solid; border-color: var(--hi) var(--lo) var(--lo) var(--hi); padding: 4px 10px; color: var(--dim); transition: opacity 1.5s 2s; }
@@ -549,6 +550,7 @@ body.dragging-guy, body.dragging-guy * { cursor: url(../assets/ui/cur_aim.png) 1
 .sf-hold .sel { flex: 1; min-width: 0; }
 .sf-hud { position: absolute; inset: 0; }
 .sf-speed { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); font: bold 30px Verdana, sans-serif; color: #f2e9c0; text-shadow: 2px 2px 0 #000; }
+.sf-fps { position: absolute; left: 12px; top: 58px; font: 11px Verdana, sans-serif; color: #b9c2a3; text-shadow: 1px 1px 0 #000; }
 .sf-info { position: absolute; left: 12px; top: 34px; text-shadow: 1px 1px 0 #000; }
 .sf-keys { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); color: var(--dim); text-shadow: 1px 1px 0 #000; white-space: nowrap; }
 .sf-msg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font: bold 26px Impact, Verdana, sans-serif; color: #8fd16f; text-shadow: 3px 3px 0 #000; white-space: nowrap; }
