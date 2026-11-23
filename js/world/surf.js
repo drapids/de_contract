@@ -1,5 +1,6 @@
 import { M4, Q, boxG } from './engine.js';
 import { TIER_COLORS } from '../tradeup.js';
+import { CS2, weaponKey, mulM } from './cs2.js';
 
 export const MAPS = [
   { id: 'surf_kitsune', name: 'surf_kitsune', tier: 1 },
@@ -122,7 +123,7 @@ export class Surf {
     el.innerHTML = `<div class="sf-pick win"><div class="dlg-t"><span>surf servers</span><button class="x" data-x>x</button></div>
       <p class="dim" style="padding:6px 8px 0">real cs surf maps. every new stage you reach pays scrap, finishing pays a lot more. hold a skin from your inventory while you surf.</p>
       <div class="sf-maps"></div><div class="sf-hold"><span>holding:</span><select class="sel"></select></div></div>
-      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-fps"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · v first/third person · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div>`;
+      <div class="sf-hud" hidden><div class="sf-speed"></div><div class="sf-fps"></div><div class="sf-info"></div><div class="sf-keys">wasd strafe · space jump (hold to bhop) · mouse look · f inspect · v first/third person · r restart · esc leave</div><div class="sf-msg"></div><div class="sf-load" hidden></div><div class="sf-click">click to grab the mouse</div></div>`;
     w.ui.append(el);
     this.$ = s => el.querySelector(s);
     this.$('[data-x]').onclick = () => this.close();
@@ -133,6 +134,7 @@ export class Surf {
       if (e.key === 'Escape') { this.exit(); return; }
       if (k === 'v' && !e.repeat) this.view = this.view === 'first' ? 'third' : 'first';
       if (k === 'r' && !e.repeat) this.respawn(true);
+      if (k === 'f' && !e.repeat) this.inspect();
       this.keys.add(k);
     });
     addEventListener('keyup', e => this.keys.delete(e.key.toLowerCase()));
@@ -216,8 +218,9 @@ export class Surf {
     this.acc = 0;
     this.respawn(true);
     this.card = null;
+    this.gun = null;
     const it = this.w.bank.s.inv[this.holdIdx];
-    if (it) this.makeCard(it);
+    if (it) { this.makeCard(it); this.loadGun(it); }
     w.av.play('Idle_Loop');
     e.setMode(true);
     this.fps = { n: 0, t: performance.now(), lo: 1e9, show: 0 };
@@ -272,6 +275,80 @@ export class Surf {
     this.card = this.e.shape({ P: [-0.11, -0.08, 0, 0.11, -0.08, 0, 0.11, 0.08, 0, -0.11, 0.08, 0], N: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1], U: [0, 1, 1, 1, 1, 0, 0, 0], I: [0, 1, 2, 0, 2, 3, 0, 2, 1, 0, 3, 2] }, this.cardTex);
     const proxy = this.w.opts.imgProxy?.(it.img);
     if (proxy) { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => { try { draw(im); } catch (e) {} }; im.src = proxy; }
+  }
+
+  async loadGun(it) {
+    const key = weaponKey(it.hash);
+    if (!key) return;
+    try {
+      this.cs2 ||= new CS2(this.e);
+      const [arms, wpn] = await Promise.all([this.cs2.load('arms'), this.cs2.load(key)]);
+      if (this.w.bank.s.inv[this.holdIdx] !== it) return;
+      this.gun = { key, arms, wpn, clip: 'idle', t0: performance.now() / 1000 };
+    } catch (err) { this.gun = null; }
+  }
+
+  inspect() {
+    const g = this.gun;
+    if (!g || !g.wpn.clips.inspect) return;
+    g.clip = 'inspect'; g.t0 = performance.now() / 1000;
+  }
+
+  gunClip(now) {
+    const g = this.gun, c = g.wpn.clips[g.clip];
+    let t = now - g.t0;
+    if (g.clip !== 'idle' && (!c || t >= c.dur)) { g.clip = 'idle'; g.t0 = now; t = 0; }
+    return { c: g.wpn.clips[g.clip], t };
+  }
+
+  drawGun(now) {
+    const g = this.gun, cs = this.cs2, e = this.e;
+    const { c, t } = this.gunClip(now);
+    cs.pose(g.arms, c, t, g.clip === 'idle');
+    cs.pose(g.wpn, c, t, g.clip === 'idle');
+    const y = this.yaw * D, p = this.pitch * D;
+    const fS = [Math.cos(p) * Math.cos(y), Math.cos(p) * Math.sin(y), -Math.sin(p)];
+    const f = [fS[0], fS[2], -fS[1]];
+    const r = [Math.sin(y), 0, Math.cos(y)];
+    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    const R = this.rpos || this.pos, k = S / 0.0254;
+    const eye = [R[0] * S, (R[2] + 64) * S, -R[1] * S];
+    const land = this.landK || 0, run = this.ground ? Math.min(1, Math.hypot(this.vel[0], this.vel[1]) / 250) : 0;
+    const bob = Math.sin(now * 8.5) * 0.004 * run, bobU = -Math.abs(Math.cos(now * 8.5)) * 0.005 * run - land * 0.02 + (this.swY || 0) * 0.3;
+    const sx = (this.swX || 0) * 0.3 + bob;
+    const o = [eye[0] + r[0] * sx + u[0] * bobU, eye[1] + r[1] * sx + u[1] * bobU, eye[2] + r[2] * sx + u[2] * bobU];
+    const M = new Float32Array([f[0] * k, f[1] * k, f[2] * k, 0, -r[0] * k, -r[1] * k, -r[2] * k, 0, u[0] * k, u[1] * k, u[2] * k, 0, o[0], o[1], o[2], 1]);
+    const asp = e.canvas.width / e.canvas.height;
+    const VP = M4.mul(M4.persp(0.94, asp, 0.01, 50), M4.look(eye, [eye[0] + f[0], eye[1] + f[1], eye[2] + f[2]], [0, 1, 0]));
+    const keep = e.VP;
+    e.VP = VP;
+    e.gl.clear(e.gl.DEPTH_BUFFER_BIT);
+    cs.draw(g.arms, M);
+    const W = mulM(M, 0, cs.boneWorld(g.arms, 'wpn'), 0, new Float32Array(16), 0);
+    cs.draw(g.wpn, W);
+    this.drawMag(g, W);
+    e.VP = keep;
+  }
+
+  drawMag(g, W) {
+    const cs = this.cs2, mag = g.wpn.mag;
+    if (!mag || !g.wpn.byName.has('clip')) return;
+    const C = mulM(W, 0, cs.boneWorld(g.wpn, 'clip'), 0, new Float32Array(16), 0);
+    cs.draw(mag, mulM(C, 0, M4.fromQT([0.5, 0.5, 0.5, 0.5], [0, 0, 0]), 0, new Float32Array(16), 0));
+  }
+
+  drawGun3(m, av) {
+    const g = this.gun, cs = this.cs2;
+    const R = av.rig, H = av.W[R.byName['hand.r']];
+    if (!H) return;
+    cs.pose(g.wpn, g.wpn.clips.idle, 0);
+    const grip = cs.boneWorld(g.wpn, g.wpn.byName.has('ag1_hand_r') ? 'ag1_hand_r' : 'weapon');
+    const k = S / 0.0254 * 1.1, c = Math.cos(-0.12), sn = Math.sin(-0.12);
+    const B = new Float32Array([0, -sn * k, c * k, 0, k, 0, 0, 0, 0, c * k, sn * k, 0, H[12], H[13], H[14], 1]);
+    const T = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -grip[12], -grip[13], -grip[14], 1]);
+    const W = M4.mul(m, mulM(B, 0, T, 0, new Float32Array(16), 0));
+    cs.draw(g.wpn, W);
+    this.drawMag(g, W);
   }
 
   wish() {
@@ -506,10 +583,14 @@ export class Surf {
     av.modelOverride = m;
     if (this.view === 'third') av.draw();
     if (this.view === 'third' && av.W) {
-      if (this.card) e.draw(this.card, M4.mul(m, this.cardModel(av, now)), { unlit: 1 });
+      if (this.gun) this.drawGun3(m, av);
+      else if (this.card) e.draw(this.card, M4.mul(m, this.cardModel(av, now)), { unlit: 1 });
     }
     av.modelOverride = null;
-    if (this.view === 'first' && this.arms) {
+    if (this.view === 'first' && this.gun) {
+      this.fpArms(now, sp, dt);
+      this.drawGun(now);
+    } else if (this.view === 'first' && this.arms) {
       const A = this.fpArms(now, sp, dt);
       e.gl.clear(e.gl.DEPTH_BUFFER_BIT);
       e.draw(this.arms, A);
