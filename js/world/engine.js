@@ -23,14 +23,14 @@ precision mediump float;
 #endif
 uniform sampler2D uTex; uniform vec4 uTint; uniform float uUnlit; uniform float uRetro;
 uniform vec3 uAmb; uniform vec3 uLP[6]; uniform vec3 uLC[6]; uniform float uLR[6];
-uniform vec3 uFog; uniform vec2 uFogR; uniform float uEmit;
+uniform vec3 uFog; uniform vec2 uFogR; uniform float uEmit; uniform vec3 uSunD; uniform vec3 uSunC; uniform float uHemi;
 varying vec3 vN; varying vec2 vU; varying vec3 vW; varying float vD;
 float bayer(vec2 p) { vec2 q = mod(floor(p), 4.0); return mod(q.x * 4.0 + q.y * 7.0, 16.0) / 16.0 - 0.5; }
 void main() {
   vec4 t = texture2D(uTex, vU) * uTint;
   if (t.a < 0.4) discard;
   vec3 n = normalize(vN);
-  vec3 l = uAmb;
+  vec3 l = uAmb * mix(1.0, 0.72 + 0.28 * n.y, uHemi) + uSunC * max(dot(n, uSunD), 0.0);
   for (int i = 0; i < 6; i++) {
     vec3 d = uLP[i] - vW;
     float dist = length(d);
@@ -64,7 +64,7 @@ export class Engine {
     gl.useProgram(p);
     this.loc = {};
     for (const n of ['aP', 'aN', 'aU', 'aB', 'aW']) this.loc[n] = gl.getAttribLocation(p, n);
-    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uSkinned', 'uTex', 'uTint', 'uUnlit', 'uAmb', 'uLP', 'uLC', 'uLR', 'uFog', 'uFogR', 'uEmit', 'uRetro']) this.loc[n] = gl.getUniformLocation(p, n);
+    for (const n of ['uBones', 'uVP', 'uModel', 'uSnap', 'uSkinned', 'uTex', 'uTint', 'uUnlit', 'uAmb', 'uLP', 'uLC', 'uLR', 'uFog', 'uFogR', 'uEmit', 'uRetro', 'uSunD', 'uSunC', 'uHemi']) this.loc[n] = gl.getUniformLocation(p, n);
     this.white = this.texCanvas(Object.assign(document.createElement('canvas'), { width: 2, height: 2 }), '#fff');
     this.props = {};
     this.texCache = {};
@@ -219,6 +219,9 @@ export class Engine {
     gl.uniform3fv(L.uAmb, this.amb);
     gl.uniform3fv(L.uFog, this.fog);
     gl.uniform2fv(L.uFogR, this.fogR);
+    gl.uniform3fv(L.uSunD, this.sun ? this.sun.d : [0, 1, 0]);
+    gl.uniform3fv(L.uSunC, this.sun ? this.sun.c : [0, 0, 0]);
+    gl.uniform1f(L.uHemi, this.sun ? 1 : 0);
     const lp = new Float32Array(18), lc = new Float32Array(18), lr = new Float32Array(6);
     this.lights.slice(0, 6).forEach((l, i) => { lp.set(l.pos, i * 3); lc.set(l.color.map(v => v * (l.k ?? 1)), i * 3); lr[i] = l.r; });
     gl.uniform3fv(L.uLP, lp); gl.uniform3fv(L.uLC, lc); gl.uniform1fv(L.uLR, lr);
