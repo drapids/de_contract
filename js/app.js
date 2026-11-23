@@ -4,6 +4,7 @@ import { Guy } from './guy.js';
 import { setup as soundSetup, sfx, setMusic, setVolume, setTyping } from './sound.js';
 import { getLock, unlock, fetchData } from './lock.js';
 
+const SOLO = document.body.classList.contains('solo');
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -136,7 +137,7 @@ function openTrade(t, quiet) {
     <div id="m-outs">${outTable(t)}</div>
     <div id="m-live"></div>
     <div class="dlg-actions">
-      <button class="btn go" id="m-send">send it to him</button>
+      ${guy ? '<button class="btn go" id="m-send">send it to him</button>' : ''}
       <button class="btn" id="m-recheck">recheck live prices</button>
       <button class="btn" id="m-log">i did this one</button>
       <button class="btn" id="m-calc">open in calculator</button>
@@ -153,7 +154,7 @@ function openTrade(t, quiet) {
     $('#m-body .shop-count').textContent = `${n}/${t.in.length} bought`;
     if (n === t.in.length) { sfx.ok?.(); guy?.say('all bought. send it', 2200); }
   });
-  history.replaceState(null, '', '#t=' + encodeURIComponent(t.id));
+  history.replaceState(null, '', location.pathname + '#t=' + encodeURIComponent(t.id));
   const best = [...t.outs].sort((a, b) => (netOf(b) ?? -1) - (netOf(a) ?? -1))[0];
   if (guy && !quiet) {
     guy.hold(best[5], best[0], { profit: (netOf(best) ?? 0) - t.cost, tier: t.tier + 1 });
@@ -165,7 +166,7 @@ function openTrade(t, quiet) {
     }, 2600);
   }
   $('#m-recheck').onclick = () => recheck(t);
-  $('#m-send').onclick = () => recheck(t, true);
+  if ($('#m-send')) $('#m-send').onclick = () => recheck(t, true);
   $('#m-log').onclick = () => logTrade(t);
   $('#m-calc').onclick = () => toCalc(t);
   $('#m-copy').onclick = () => navigator.clipboard?.writeText(location.href);
@@ -389,8 +390,25 @@ async function loadInv() {
 }
 
 async function forceScan() {
-  if (!guy) return;
-  const b = $('#force'); b.disabled = true;
+  const b = $('#force');
+  if (!guy) {
+    b.disabled = true;
+    const was = b.textContent;
+    try {
+      b.textContent = 'starting...';
+      await worker('/scan', { method: 'POST' });
+      b.textContent = 'scan started';
+      S.waitingFor = S.data?.at || 0;
+      $('#status').insertAdjacentHTML('beforeend', ' · <b>fresh scan on the way (~8 min)</b>');
+      pollScan(0);
+    } catch (e) {
+      b.textContent = e.soft ? 'set worker url' : 'failed';
+      $('#status').insertAdjacentHTML('beforeend', ` · <span class="rl">${esc(e.message)}</span>`);
+    }
+    setTimeout(() => { b.textContent = was; b.disabled = false; }, 4000);
+    return;
+  }
+  b.disabled = true;
   guy.terminal(true, '> force scan');
   try {
     guy.log('waking up github...');
@@ -418,7 +436,7 @@ async function pollScan(n) {
   if (n > 30) { guy?.say('github is slow today. it will show up on its own', 3000); return; }
   await sleep(30000);
   await load();
-  if (S.data?.at && S.data.at !== S.waitingFor) { guy?.say('fresh scan is in', 2500); return; }
+  if (S.data?.at && S.data.at !== S.waitingFor) { guy?.say('fresh scan is in', 2500); if (!guy) sfx.ok?.(); return; }
   pollScan(n + 1);
 }
 
@@ -533,14 +551,14 @@ function bind() {
     S.settings = { worker: $('#s-worker').value.trim(), guy: $('#s-guy').checked, music: $('#s-music').checked, skin: $('#s-skin').value, vol: +$('#s-vol').value, bg: $('#s-bg').checked, typing: $('#s-typ').checked, typVol: +$('#s-typvol').value };
     setTyping(S.settings.typing, S.settings.typVol);
     store.set('settings', S.settings);
-    $('#guy').hidden = !S.settings.guy; document.body.classList.toggle('noguy', !S.settings.guy);
+    $('#guy').hidden = !S.settings.guy || SOLO; document.body.classList.toggle('noguy', !S.settings.guy || SOLO);
     setVolume(S.settings.vol); setMusic(S.settings.bg); $('#snd').classList.toggle('off', !S.settings.bg);
     if (old !== S.settings.skin) { applySkin(); world?.setSkin(S.settings.skin || 'sas').catch(() => {}); }
   };
   for (const id of ['#s-worker', '#s-guy', '#s-music', '#s-skin', '#s-vol', '#s-bg', '#s-typ', '#s-typvol']) $(id).addEventListener('change', save);
   $('#s-scene').onclick = () => window.dispatchEvent(new CustomEvent('dc:ratelimit', { detail: { retry: 30, manual: true } }));
-  $('#guy').hidden = !st.guy;
-  document.body.classList.toggle('noguy', !st.guy);
+  $('#guy').hidden = !st.guy || SOLO;
+  document.body.classList.toggle('noguy', !st.guy || SOLO);
 }
 
 tierOptions($('#g-tier'));
@@ -558,7 +576,7 @@ async function applySkin() {
   } catch (e) { await guy.setSkin('orange'); }
 }
 const loader = (url, type) => fetchData(url, type);
-try { guy = new Guy($('#guy'), { base: 'assets/', loader, onEvent }); window.guy = guy; } catch (e) { guy = null; }
+if (!SOLO) try { guy = new Guy($('#guy'), { base: 'assets/', loader, onEvent }); window.guy = guy; } catch (e) { guy = null; }
 window.dc = { S, get guy() { return guy; } };
 await guy?.ready;
 if (await getLock()) {
@@ -593,6 +611,6 @@ async function toWorld() {
 }
 $('#home').onclick = () => toWorld();
 document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea, [contenteditable]')) e.preventDefault(); });
-toWorld().catch(e => { console.error(e); toSite(); });
+if (!SOLO) toWorld().catch(e => { console.error(e); toSite(); });
 setInterval(renderStatus, 30000);
-import('./specter.js').then(m => m.init?.(guy, S)).catch(() => {});
+if (!SOLO) import('./specter.js').then(m => m.init?.(guy, S)).catch(() => {});

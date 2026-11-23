@@ -558,3 +558,4 @@ body.dragging-guy, body.dragging-guy * { cursor: url(../assets/ui/cur_aim.png) 1
 .sf-load { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(20,22,16,.9); padding: 10px 18px; border: 1px solid var(--lo); }
 .sf-click { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); background: rgba(196,181,80,.9); color: #111; padding: 3px 10px; font-weight: bold; }
 body .world-ui:has(.sf-hud:not([hidden])) .w-hint, body .world-ui:has(.sf-hud:not([hidden])) .w-where, body .world-ui:has(.sf-pick:not([hidden])) .w-hint { display: none; }
+.solo [hidden] { display: none !important; }
