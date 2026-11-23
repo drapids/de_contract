@@ -31,7 +31,7 @@ export class Loot {
 
   value(item) {
     const p = this.data().prices?.[item.hash];
-    let c = p ? (p[3] || Math.round(p[0] * 0.87)) : item.c || 0;
+    let c = p && (p[3] || p[0]) ? (p[3] || Math.round(p[0] * 0.87)) : item.c || 0;
     if (!c) c = [0, 0, 8, 45, 220, 900, 18000][item.r] || 10;
     return Math.max(1, Math.round(c * RUB));
   }

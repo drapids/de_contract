@@ -13,7 +13,7 @@ export function lifeOf(hollow) {
 function sell(prices, h) {
   const p = prices[h];
   if (!p) return null;
-  return p[3] || Math.round(p[0] * 0.87);
+  return p[3] || (p[0] ? Math.round(p[0] * 0.87) : null);
 }
 
 function outcomesOf(s, prices) {

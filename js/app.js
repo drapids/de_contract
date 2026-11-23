@@ -10,6 +10,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const pct = v => (v * 100).toFixed(v < 0.1 && v > -0.1 ? 1 : 0) + '%';
 const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.round(s / 60) + 'm ago' : s < 86400 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
 const span = ms => { const m = ms / 60000; return m < 60 ? Math.max(1, Math.round(m)) + ' min' : (m / 60).toFixed(1) + ' hrs'; };
+const netOf = o => o[3] == null || o[4] === '?' ? null : o[3];
 const short = h => h.replace('StatTrak™ ', '').replace(/ \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)$/, m => ' ' + WEARS.find(w => m.includes(w[0]))[1]);
 
 const store = {
@@ -103,10 +104,10 @@ function find(id) { return [...(S.data?.guaranteed || []), ...(S.data?.pending |
 
 function outTable(t, live) {
   const rows = t.outs.map(o => {
-    const net = live?.outs?.[o[0]] ?? o[3];
-    const cls = net > (live?.cost ?? t.cost) ? 'pos' : 'neg';
+    const net = live?.outs?.[o[0]] ?? netOf(o);
+    const cls = net == null ? 'nop' : net > (live?.cost ?? t.cost) ? 'pos' : 'neg';
     const alt = o[7] ? `<br><small class="dim">best case floats: ${esc(short(o[7]))}</small>` : '';
-    return `<tr class="${cls}"><td>${o[5] ? `<img src="${esc(o[5])}" alt="">` : ''}</td><td>${esc(o[0])}${alt}</td><td class="n">${pct(o[1])}</td><td class="n">${o[2].toFixed(4)}</td><td class="n">${usd(net)}<br><small class="dim">${esc(o[4])}</small></td></tr>`;
+    return `<tr class="${cls}"><td>${o[5] ? `<img src="${esc(o[5])}" alt="">` : ''}</td><td>${esc(o[0])}${alt}</td><td class="n">${pct(o[1])}</td><td class="n">${o[2].toFixed(4)}</td><td class="n">${net == null ? '<span class="dim">no price</span>' : `${usd(net)}<br><small class="dim">${esc(o[4])}</small>`}</td></tr>`;
   }).join('');
   return `<table class="t"><tr><th></th><th>outcome</th><th class="n">odds</th><th class="n">float</th><th class="n">you get (after fee)</th></tr>${rows}</table>`;
 }
@@ -129,6 +130,7 @@ function openTrade(t, quiet) {
     </div>
     <div class="box-t">buy these <span class="shop-count">${got.filter(Boolean).length}/${t.in.length} bought</span></div>
     <table class="t">${ins}</table>
+    ${t.unknown ? `<div class="note">${pct(t.unknown)} of the outcomes have no price anywhere right now, so they're left out of worst case and ev. ev is just from the ones that do have a price</div>` : ''}
     <div class="note">floats are assumed near the top of each wear so this is the safe estimate. buy lower floats = better outcome wear. if you can, check floats on csfloat before buying.</div>
     <div class="box-t">possible outcomes</div>
     <div id="m-outs">${outTable(t)}</div>
@@ -152,9 +154,9 @@ function openTrade(t, quiet) {
     if (n === t.in.length) { sfx.ok?.(); guy?.say('all bought. send it', 2200); }
   });
   history.replaceState(null, '', '#t=' + encodeURIComponent(t.id));
-  const best = [...t.outs].sort((a, b) => b[3] - a[3])[0];
+  const best = [...t.outs].sort((a, b) => (netOf(b) ?? -1) - (netOf(a) ?? -1))[0];
   if (guy && !quiet) {
-    guy.hold(best[5], best[0], { profit: best[3] - t.cost, tier: t.tier + 1 });
+    guy.hold(best[5], best[0], { profit: (netOf(best) ?? 0) - t.cost, tier: t.tier + 1 });
     clearTimeout(S.reactTimer);
     S.reactTimer = setTimeout(() => {
       if ($('#modal').hidden) return;
@@ -201,7 +203,7 @@ async function recheck(t, cine) {
     const live = await worker('/prices?names=' + encodeURIComponent(JSON.stringify(names)));
     log('got em. crunching');
     if (cine) await sleep(800);
-    let cost = 0, worst = Infinity, ev = 0, win = 0, missing = [];
+    let cost = 0, worst = Infinity, ev = 0, win = 0, known = 0, missing = [];
     const outs = {};
     for (const i of t.in) {
       const m = live[i[0]] || {};
@@ -212,10 +214,13 @@ async function recheck(t, cine) {
       const m = live[o[0]] || {};
       const st = m.steam, base = st ? Math.min(st[0], st[2] || st[0]) : 0;
       const net = base && (st[1] >= 1 || !st[2]) ? netAfterFee('steam', base - 1) : 0;
-      outs[o[0]] = net || o[3];
-      worst = Math.min(worst, outs[o[0]]); ev += o[1] * outs[o[0]];
+      outs[o[0]] = net || netOf(o);
+      if (outs[o[0]] == null) continue;
+      worst = Math.min(worst, outs[o[0]]); ev += o[1] * outs[o[0]]; known += o[1];
     }
-    for (const o of t.outs) if (outs[o[0]] > cost) win += o[1];
+    if (!isFinite(worst)) worst = 0;
+    if (known) ev /= known;
+    for (const o of t.outs) if (outs[o[0]] != null && outs[o[0]] > cost) win += o[1];
     const sure = worst > cost;
     log(`cost ${usd(cost)} worst ${usd(worst)}`);
     log(sure ? 'STILL GUARANTEED' : 'not guaranteed');
@@ -246,7 +251,7 @@ function logTrade(t) {
     worth $ <input class="inp" id="l-val" type="number" step="0.01" style="width:90px">
     paid $ <input class="inp" id="l-cost" type="number" step="0.01" value="${(t.cost / 100).toFixed(2)}" style="width:90px">
     <button class="btn go" id="l-save">save</button></div></div>`;
-  const setVal = () => { $('#l-val').value = (t.outs[$('#l-out').value][3] / 100).toFixed(2); };
+  const setVal = () => { $('#l-val').value = ((netOf(t.outs[$('#l-out').value]) || 0) / 100).toFixed(2); };
   setVal();
   $('#l-out').onchange = setVal;
   $('#l-save').onclick = () => {
@@ -309,7 +314,7 @@ function renderCalc() {
   $('#c-inputs').innerHTML = C.rows.map((r, i) => {
     const ws = wearsFor(r.skin).map(w => `<option value="${w}" ${w === r.wi ? 'selected' : ''}>${WEARS[w][1]}</option>`).join('');
     const p = S.prices[hashName(r.skin, r.wi, C.st)];
-    return `<div class="cin" data-i="${i}" style="--c:${TIER_COLORS[r.skin.r]}">${r.skin.img ? `<img src="${esc(r.skin.img)}" alt="">` : '<i></i>'}<span title="${esc(r.skin.n)}">${esc(r.skin.n)}<br><small class="dim">${p ? usd(p[0]) + ' ' + p[1] : 'no price'}</small></span>
+    return `<div class="cin" data-i="${i}" style="--c:${TIER_COLORS[r.skin.r]}">${r.skin.img ? `<img src="${esc(r.skin.img)}" alt="">` : '<i></i>'}<span title="${esc(r.skin.n)}">${esc(r.skin.n)}<br><small class="dim">${p?.[0] ? usd(p[0]) + ' ' + p[1] : 'no price'}</small></span>
       <select class="sel" data-k="wi">${ws}</select>
       <input class="inp" data-k="f" type="number" step="0.001" value="${r.f}">
       <input class="inp" data-k="k" type="number" min="1" max="${need}" value="${r.k}">
@@ -320,14 +325,17 @@ function renderCalc() {
   const outs = outcomes(S.db, ins, C.st);
   if (!outs) { $('#c-out').innerHTML = '<span class="bad">one of these has nothing to trade up into</span>'; return; }
   let cost = 0, ev = 0, win = 0, worst = Infinity, miss = 0;
-  for (const r of C.rows) { const p = S.prices[hashName(r.skin, r.wi, C.st)]; if (p) cost += p[0] * r.k; else miss++; }
-  for (const o of outs) { const p = S.prices[o.hash]; o.net = p ? p[3] : 0; ev += o.p * o.net; worst = Math.min(worst, o.net); }
-  for (const o of outs) if (o.net > cost) win += o.p;
+  let known = 0;
+  for (const r of C.rows) { const p = S.prices[hashName(r.skin, r.wi, C.st)]; if (p?.[0]) cost += p[0] * r.k; else miss++; }
+  for (const o of outs) { const p = S.prices[o.hash]; o.net = p?.[3] || null; if (o.net == null) continue; ev += o.p * o.net; known += o.p; worst = Math.min(worst, o.net); }
+  if (!isFinite(worst)) worst = 0;
+  if (known) ev /= known;
+  for (const o of outs) if (o.net != null && o.net > cost) win += o.p;
   $('#c-out').innerHTML = `<div class="summary">
       <div class="stat"><small>cost</small><b>${usd(cost)}</b></div><div class="stat"><small>ev</small><b>${usd(Math.round(ev))}</b></div>
       <div class="stat"><small>worst</small><b class="${worst > cost ? 'ok' : 'bad'}">${usd(worst)}</b></div><div class="stat"><small>win</small><b>${pct(win)}</b></div></div>
-    ${miss ? '<div class="note">missing prices for some inputs</div>' : ''}
-    <div class="couts">${outs.map(o => { const sk = S.db.byName.get(parseHash(o.hash).name); return `<div class="cout ${o.net > cost ? 'pos' : 'neg'}" style="--c:${TIER_COLORS[sk?.r ?? 0]}">${sk?.img ? `<img src="${esc(sk.img)}" alt="">` : '<i></i>'}<div><b>${esc(short(o.hash))}</b><small>float ${o.float.toFixed(4)}</small><span class="odds"><s style="width:${(o.p * 100).toFixed(1)}%"></s></span></div><em>${pct(o.p)}<br><b>${o.net ? usd(o.net) : '?'}</b></em></div>`; }).join('')}</div>`;
+    ${miss ? '<div class="note">missing prices for some inputs</div>' : ''}${known < 0.999 ? `<div class="note">${pct(1 - known)} of outcomes have no price, left out of worst and ev</div>` : ''}
+    <div class="couts">${outs.map(o => { const sk = S.db.byName.get(parseHash(o.hash).name); return `<div class="cout ${o.net == null ? 'nop' : o.net > cost ? 'pos' : 'neg'}" style="--c:${TIER_COLORS[sk?.r ?? 0]}">${sk?.img ? `<img src="${esc(sk.img)}" alt="">` : '<i></i>'}<div><b>${esc(short(o.hash))}</b><small>float ${o.float.toFixed(4)}</small><span class="odds"><s style="width:${(o.p * 100).toFixed(1)}%"></s></span></div><em>${pct(o.p)}<br><b>${o.net != null ? usd(o.net) : 'no price'}</b></em></div>`; }).join('')}</div>`;
 }
 
 function addCalc(skin, wi, k = 1) {
